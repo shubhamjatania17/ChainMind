@@ -9,6 +9,7 @@
 [debug] [2026-04-28T10:53:03.973Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
 [debug] [2026-04-28T10:53:03.974Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
 [debug] [2026-04-28T10:53:04.002Z] [Firebase Plugin] VSCode notification server listening on port 40001
+<<<<<<< HEAD
 [info] [Firebase Plugin] Starting SQL Connect toolkit (version 3.4.5) on port 50001
 [debug] [2026-04-28T10:53:31.096Z] 'fdc build' failed with error: Unable to build your SQL Connect schema and connectors (exit code 1): E0428 16:23:31.089179   20000 cmd.go:43] Error loading data connect config: could not find dataconnect.yaml in `c:\Users\Shubham\Desktop\My Works\ChainMind\dataconnect`
  {"metadata":{"emulator":{"name":"dataconnect"},"message":"'fdc build' failed with error: Unable to build your SQL Connect schema and connectors (exit code 1): E0428 16:23:31.089179   20000 cmd.go:43] Error loading data connect config: could not find dataconnect.yaml in `c:\\Users\\Shubham\\Desktop\\My Works\\ChainMind\\dataconnect`\n"}}
@@ -209,3 +210,5 @@ E0428 16:36:31.209148    5612 watch.go:40] Failed to load config from "c:\\Users
  {"metadata":{"emulator":{"name":"dataconnect"},"message":"E0428 16:36:51.208877    5612 watch.go:40] Failed to load config from \"c:\\\\Users\\\\Shubham\\\\Desktop\\\\My Works\\\\ChainMind\\\\dataconnect\": could not find dataconnect.yaml in `c:\\Users\\Shubham\\Desktop\\My Works\\ChainMind\\dataconnect`\n"}}
 [debug] [2026-04-28T11:07:01.208Z] E0428 16:37:01.208240    5612 watch.go:40] Failed to load config from "c:\\Users\\Shubham\\Desktop\\My Works\\ChainMind\\dataconnect": could not find dataconnect.yaml in `c:\Users\Shubham\Desktop\My Works\ChainMind\dataconnect`
  {"metadata":{"emulator":{"name":"dataconnect"},"message":"E0428 16:37:01.208240    5612 watch.go:40] Failed to load config from \"c:\\\\Users\\\\Shubham\\\\Desktop\\\\My Works\\\\ChainMind\\\\dataconnect\": could not find dataconnect.yaml in `c:\\Users\\Shubham\\Desktop\\My Works\\ChainMind\\dataconnect`\n"}}
+=======
+>>>>>>> 83a9795fba7a3944e5f7026f5cf0bd3d48ba6dd3
