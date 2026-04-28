@@ -44,7 +44,7 @@ app.post('/ai-insight', async (req, res) => {
       return res.status(503).json({ error: 'Gemini API key not configured on server' });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     
     // As per the requirement prompt
     const prompt = `Analyze this supply chain inventory scenario. Identify risks and suggest actions like stock redistribution or restocking.\n\nCurrent Inventory: ${JSON.stringify(inventory)}\nNote: Stock < 80 is considered at Risk.`;
