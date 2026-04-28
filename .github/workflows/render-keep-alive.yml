@@ -1,0 +1,33 @@
+name: Render Keep-Alive
+
+on:
+  schedule:
+    # Runs every 14 minutes to prevent Render free tier spin-down (which occurs after 15 mins of inactivity)
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Allows you to manually trigger the action from the GitHub UI
+
+jobs:
+  ping-render-services:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend Service
+        env:
+          RENDER_BACKEND_URL: ${{ secrets.RENDER_BACKEND_URL }}
+        run: |
+          if [ -z "$RENDER_BACKEND_URL" ]; then
+            echo "RENDER_BACKEND_URL secret is not set. Skipping backend ping."
+          else
+            echo "Pinging Backend URL..."
+            curl -sS "$RENDER_BACKEND_URL" > /dev/null || echo "Warning: Could not reach Backend."
+          fi
+
+      - name: Ping Frontend Service
+        env:
+          RENDER_FRONTEND_URL: ${{ secrets.RENDER_FRONTEND_URL }}
+        run: |
+          if [ -z "$RENDER_FRONTEND_URL" ]; then
+            echo "RENDER_FRONTEND_URL secret is not set. Skipping frontend ping."
+          else
+            echo "Pinging Frontend URL..."
+            curl -sS "$RENDER_FRONTEND_URL" > /dev/null || echo "Warning: Could not reach Frontend."
+          fi
