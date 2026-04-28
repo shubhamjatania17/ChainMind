@@ -13,6 +13,21 @@ app.use(express.json());
 // Initialize Gemini API
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 
+/**
+ * Utility to strip wrapping markdown code blocks (```markdown ... ```) 
+ * that some models (like Gemini 3) often include.
+ */
+function cleanMarkdown(text) {
+  if (!text) return text;
+  let cleaned = text.trim();
+  // Remove markdown code block wrappers if they exist
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:markdown)?\n?/i, '');
+    cleaned = cleaned.replace(/\n?```$/i, '');
+  }
+  return cleaned.trim();
+}
+
 // Simulate Route
 app.post('/simulate', (req, res) => {
   try {
@@ -55,7 +70,7 @@ app.post('/ai-insight', async (req, res) => {
       eventContext = `A simulated demand surge of ${surgePercentage}% just occurred in ${targetCity}. `;
     }
 
-    const prompt = `Analyze this supply chain inventory scenario. ${eventContext}Identify risks and suggest actions like stock redistribution or restocking.\n\nCurrent Inventory: ${JSON.stringify(inventory)}\nNote: Stock < 80 is considered at Risk.`;
+    const prompt = `Analyze this supply chain inventory scenario. ${eventContext}Identify risks and suggest actions like stock redistribution or restocking.\n\nCurrent Inventory: ${JSON.stringify(inventory)}\nNote: Stock < 80 is considered at Risk.\n\nIMPORTANT: Return ONLY the markdown content. Do NOT wrap your entire response in triple backticks (e.g., \`\`\`markdown ... \`\`\`).`;
     
     let result;
     let retries = 3;
@@ -88,7 +103,7 @@ app.post('/ai-insight', async (req, res) => {
     // If the API call succeeded, return the real response
     if (apiSuccess && result && result.response) {
       const text = result.response.text();
-      return res.json({ insight: text });
+      return res.json({ insight: cleanMarkdown(text) });
     } 
     
     // Fallback: Generate a Mock Response
@@ -134,7 +149,8 @@ app.post('/generate-mitigation-report', async (req, res) => {
     }
 
     const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
-    const prompt = `Read the following AI analysis of a supply chain scenario and generate a detailed Mitigation Report with proper step-by-step actions to resolve any critical issues. Format the report nicely in Markdown.\n\nAI Analysis:\n${insight}`;
+    const now = new Date().toLocaleString();
+    const prompt = `Read the following AI analysis of a supply chain scenario and generate a detailed Mitigation Report with proper step-by-step actions to resolve any critical issues. Format the report nicely in Markdown.\n\nReport Timestamp: ${now}\n\nAI Analysis:\n${insight}\n\nIMPORTANT: Include the Report Timestamp in the header of your response. Return ONLY the markdown content. Do NOT wrap your entire response in triple backticks (e.g., \`\`\`markdown ... \`\`\`).`;
     
     let result;
     let retries = 3;
@@ -165,10 +181,12 @@ app.post('/generate-mitigation-report', async (req, res) => {
 
     let reportText = '';
     if (apiSuccess && result && result.response) {
-      reportText = result.response.text();
+      reportText = cleanMarkdown(result.response.text());
     } else {
       // Fallback: Generate a Mock Mitigation Report
+      const now = new Date().toLocaleString();
       reportText = `## ChainMind Mitigation Report (Mock Mode)
+*Generated at: ${now}*
 
 *Notice: The live AI API is currently experiencing high demand. This is a locally generated fallback report.*
 
