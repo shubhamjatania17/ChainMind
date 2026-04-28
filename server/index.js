@@ -47,7 +47,7 @@ app.post('/ai-insight', async (req, res) => {
       return res.status(503).json({ error: 'Gemini API key not configured on server' });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
     
     // Add specific context if a simulation was just run
     let eventContext = '';
@@ -133,7 +133,7 @@ app.post('/generate-mitigation-report', async (req, res) => {
       return res.status(503).json({ error: 'Gemini API key not configured on server' });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
     const prompt = `Read the following AI analysis of a supply chain scenario and generate a detailed Mitigation Report with proper step-by-step actions to resolve any critical issues. Format the report nicely in Markdown.\n\nAI Analysis:\n${insight}`;
     
     let result;
