@@ -39,7 +39,7 @@ function Home() {
             AI-Powered Digital Twin Technology
           </div>
           
-          <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight mb-8 font-display">
+          <h1 className="text-5xl sm:text-6xl md:text-8xl font-extrabold tracking-tight mb-8 font-display">
             Future-Proof Your <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
               Supply Chain
@@ -64,7 +64,7 @@ function Home() {
 
         {/* Feature Grid */}
         <div className="max-w-7xl mx-auto px-6 py-24 border-t border-white/5">
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Feature 1 */}
             <div className="p-8 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-all group">
               <div className="h-14 w-14 rounded-2xl bg-blue-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
@@ -110,7 +110,7 @@ function Home() {
               <span className="text-xl font-bold tracking-tight font-display text-white">ChainMind</span>
             </div>
             
-            <div className="flex space-x-8 text-sm font-medium text-slate-400">
+            <div className="flex flex-wrap justify-center gap-x-8 gap-y-4 text-sm font-medium text-slate-400">
               <a href="#" className="hover:text-white transition-colors">Features</a>
               <a href="#" className="hover:text-white transition-colors">Pricing</a>
               <a href="#" className="hover:text-white transition-colors">Documentation</a>
@@ -119,8 +119,8 @@ function Home() {
           </div>
           
           <div className="mt-8 pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500">
-            <p>&copy; {new Date().getFullYear()} ChainMind Systems. All rights reserved.</p>
-            <div className="flex space-x-6 mt-4 md:mt-0">
+            <p className="text-center md:text-left">&copy; {new Date().getFullYear()} ChainMind Systems. All rights reserved.</p>
+            <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-4 md:mt-0">
               <a href="#" className="hover:text-slate-300 transition-colors">Privacy Policy</a>
               <a href="#" className="hover:text-slate-300 transition-colors">Terms of Service</a>
             </div>

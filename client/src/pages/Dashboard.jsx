@@ -181,7 +181,7 @@ function Dashboard({ user }) {
           ) : (
             <div className="mt-8 space-y-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
               {setupData.map((data, index) => (
-                <div key={index} className="flex space-x-4 p-4 bg-black/20 rounded-xl border border-white/5">
+                <div key={index} className="flex flex-col sm:flex-row gap-4 p-4 bg-black/20 rounded-xl border border-white/5">
                   <div className="flex-1">
                     <label className="block text-xs font-medium text-slate-400">City Name</label>
                     <input 
@@ -205,7 +205,7 @@ function Dashboard({ user }) {
                   </div>
                 </div>
               ))}
-              <div className="pt-4 flex space-x-4">
+              <div className="pt-4 flex flex-col sm:flex-row gap-4">
                 <button 
                   onClick={() => setSetupData([])}
                   className="flex-1 py-3 px-4 border border-white/10 rounded-xl shadow-sm text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
@@ -327,7 +327,7 @@ function Dashboard({ user }) {
         {/* Warehouse Network Cards */}
         <div>
           <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 ml-2">Global Network Status</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {Object.entries(inventory).map(([warehouse, stock]) => {
               const isRisk = stock < 80;
               return (
