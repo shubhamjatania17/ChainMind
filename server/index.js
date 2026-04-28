@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-
+const axios = require('axios');
+const { marked } = require('marked');
 dotenv.config();
 
 const app = express();
@@ -162,13 +163,12 @@ app.post('/generate-mitigation-report', async (req, res) => {
       }
     }
 
+    let reportText = '';
     if (apiSuccess && result && result.response) {
-      const text = result.response.text();
-      return res.json({ report: text });
-    }
-    
-    // Fallback: Generate a Mock Mitigation Report
-    const mockReport = `## ChainMind Mitigation Report (Mock Mode)
+      reportText = result.response.text();
+    } else {
+      // Fallback: Generate a Mock Mitigation Report
+      reportText = `## ChainMind Mitigation Report (Mock Mode)
 
 *Notice: The live AI API is currently experiencing high demand. This is a locally generated fallback report.*
 
@@ -184,8 +184,52 @@ app.post('/generate-mitigation-report', async (req, res) => {
 ### Phase 3: Strategic Measures (Long-term)
 1. **Review Safety Stocks**: Re-evaluate safety stock levels to buffer against future surges.
 2. **Improve Forecasting**: Incorporate recent surge data into predictive models.`;
+    }
 
-    res.json({ report: mockReport });
+    const htmlContent = marked(reportText);
+    const pdfmonkeyApiKey = process.env.PDFMONKEY_API_KEY;
+    const templateId = process.env.PDFMONKEY_TEMPLATE_ID;
+
+    if (!pdfmonkeyApiKey || !templateId) {
+      return res.status(500).json({ error: 'PDFMonkey credentials missing in .env' });
+    }
+
+    const pdfResponse = await axios.post('https://api.pdfmonkey.io/api/v1/documents', {
+      document: {
+        document_template_id: templateId,
+        payload: { reportHtml: htmlContent },
+        status: 'pending'
+      }
+    }, {
+      headers: {
+        'Authorization': `Bearer ${pdfmonkeyApiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const documentId = pdfResponse.data.document.id;
+    let downloadUrl = null;
+    let pollRetries = 10;
+    
+    while (pollRetries > 0) {
+      await new Promise(r => setTimeout(r, 1500));
+      const statusRes = await axios.get(`https://api.pdfmonkey.io/api/v1/documents/${documentId}`, {
+        headers: { 'Authorization': `Bearer ${pdfmonkeyApiKey}` }
+      });
+      if (statusRes.data.document.status === 'success') {
+        downloadUrl = statusRes.data.document.download_url;
+        break;
+      } else if (statusRes.data.document.status === 'failure') {
+        throw new Error('PDFMonkey generation failed');
+      }
+      pollRetries--;
+    }
+
+    if (downloadUrl) {
+      return res.json({ pdfUrl: downloadUrl });
+    } else {
+      throw new Error('PDFMonkey generation timed out');
+    }
   } catch (error) {
     console.error("Mitigation Report Error:", error);
     res.status(500).json({ error: error.message });
