@@ -27,6 +27,10 @@ ChainMind is a dynamic, real-time digital twin application designed to visualize
 - **Fail-Safe Mock Intelligence**: Built-in exponential backoff and dynamic local mock generation ensures the dashboard continues providing actionable insights even during live API outages or high-demand throttling.
 - **Premium UI/UX**: A highly polished, modern interface featuring glassmorphism, responsive animations, and a sleek dark mode aesthetic.
 
+## Deployed MVP Link
+
+[https://chainmind-fpb5.onrender.com](ChainMind | Supply Chain Digital Twin)
+
 ## Future Scope
 
 - **Predictive Analytics**: Implementing historical data tracking to forecast seasonal demand surges before they happen.
