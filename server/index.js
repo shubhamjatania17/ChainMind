@@ -59,31 +59,62 @@ app.post('/ai-insight', async (req, res) => {
     let result;
     let retries = 3;
     let delay = 1000;
+    let apiSuccess = false;
     
     while (retries > 0) {
       try {
         result = await model.generateContent(prompt);
+        apiSuccess = true;
         break; // Success! Break out of the retry loop
       } catch (err) {
-        // If it's a 503 High Demand error, retry
-        if (err.message.includes('503') || err.message.includes('high demand') || err.status === 503) {
+        // If it's a 503 High Demand or 429 Quota error, retry
+        if (err.message.includes('503') || err.message.includes('high demand') || err.status === 503 || err.status === 429) {
           retries--;
           if (retries === 0) {
-            throw new Error("Google Gemini API is currently experiencing unusually high demand. Please wait a few seconds and try clicking 'Inject Surge' again.");
+            console.warn("Gemini API overloaded. Falling back to mock response.");
+            break;
           }
-          console.warn(`Gemini API 503 error. Retrying in ${delay}ms...`);
+          console.warn(`Gemini API overloaded. Retrying in ${delay}ms...`);
           await new Promise(res => setTimeout(res, delay));
-          delay *= 2; // Exponential backoff: 1s, 2s, 4s...
+          delay *= 2; // Exponential backoff
         } else {
-          throw err; // Other errors should fail immediately
+          console.warn(`Gemini API Error: ${err.message}. Falling back to mock response.`);
+          break; // Other errors fallback immediately
         }
       }
     }
 
-    const response = await result.response;
-    const text = response.text();
+    // If the API call succeeded, return the real response
+    if (apiSuccess && result && result.response) {
+      const text = result.response.text();
+      return res.json({ insight: text });
+    } 
+    
+    // Fallback: Generate a Mock Response
+    let criticalCities = [];
+    let stableCities = [];
+    for (const [city, stock] of Object.entries(inventory)) {
+        if (stock < 80) criticalCities.push(city);
+        else stableCities.push(city);
+    }
+    
+    let mockText = `**[Mock Intelligence - Live API Unavailable]**\n\n`;
+    if (targetCity && surgePercentage) {
+        mockText += `* **Event Detected**: A simulated demand surge of **${surgePercentage}%** just impacted **${targetCity}**.\n`;
+    }
+    
+    if (criticalCities.length > 0) {
+        mockText += `* **Critical Nodes**: **${criticalCities.join(', ')}** dropped below the safe threshold of 80 units.\n`;
+        if (stableCities.length > 0) {
+            mockText += `* **Recommendation**: Reroute excess inventory from **${stableCities[0]}** to stabilize the network immediately.\n`;
+        } else {
+            mockText += `* **Recommendation**: **Emergency Restocking Required!** No stable warehouses available for local rerouting.\n`;
+        }
+    } else {
+        mockText += `* **Status**: Network is stable. All nodes are operating securely above critical thresholds.\n`;
+    }
 
-    res.json({ insight: text });
+    res.json({ insight: mockText });
   } catch (error) {
     console.error("AI Insight Error:", error);
     res.status(500).json({ error: error.message });
