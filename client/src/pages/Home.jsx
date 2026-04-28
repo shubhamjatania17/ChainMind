@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, BrainCircuit, ArrowRight, PackageOpen, Network } from 'lucide-react';
+import { Activity, BrainCircuit, ArrowRight, PackageOpen, Network, Menu, X } from 'lucide-react';
 
 function Home() {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans overflow-hidden selection:bg-blue-500/30">
       
@@ -12,23 +15,54 @@ function Home() {
       </div>
 
       {/* Navigation */}
-      <nav className="relative z-10 border-b border-white/10 bg-white/5 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <PackageOpen className="h-6 w-6 text-white" />
+      <nav className="relative z-50 border-b border-white/10 bg-white/5 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="h-8 w-8 sm:h-10 sm:w-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <PackageOpen className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
             </div>
-            <span className="text-2xl font-bold tracking-tight font-display">ChainMind</span>
+            <span className="text-xl sm:text-2xl font-bold tracking-tight font-display">ChainMind</span>
           </div>
-          <div className="flex items-center space-x-6">
-            <Link to="/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">
+          
+          {/* Desktop Menu */}
+          <div className="hidden sm:flex items-center space-x-6">
+            <Link to="/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors whitespace-nowrap">
               Sign In
             </Link>
-            <Link to="/login" state={{ isSignUp: true }} className="px-5 py-2.5 text-sm font-semibold bg-white text-slate-900 rounded-lg hover:bg-slate-200 transition-colors shadow-lg">
+            <Link to="/login" state={{ isSignUp: true }} className="px-5 py-2.5 text-sm font-semibold bg-white text-slate-900 rounded-lg hover:bg-slate-200 transition-colors shadow-lg whitespace-nowrap">
               Get Started
             </Link>
           </div>
+
+          {/* Mobile Menu Toggle */}
+          <div className="sm:hidden flex items-center">
+            <button 
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="text-slate-300 hover:text-white p-2 focus:outline-none"
+            >
+              {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Menu Dropdown */}
+        {isMobileMenuOpen && (
+          <div className="sm:hidden absolute top-20 left-0 w-full bg-slate-900/95 backdrop-blur-xl border-b border-white/10 shadow-2xl py-4 px-4 flex flex-col space-y-4 z-50">
+            <Link 
+              to="/login" 
+              className="px-4 py-3 text-base font-medium text-white bg-white/5 rounded-xl hover:bg-white/10 transition-colors text-center border border-white/10"
+            >
+              Sign In
+            </Link>
+            <Link 
+              to="/login" 
+              state={{ isSignUp: true }} 
+              className="px-4 py-3 text-base font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-500 hover:to-indigo-500 transition-colors shadow-lg shadow-blue-500/20 text-center"
+            >
+              Get Started
+            </Link>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
