@@ -32,6 +32,7 @@ ChainMind is a dynamic, real-time digital twin application designed to visualize
 <https://chainmind-fpb5.onrender.com>
 
 ## Demo Video
+
 <https://screenrec.com/share/m9aPJjvZ1R>
 
 ## Future Scope
