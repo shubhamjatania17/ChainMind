@@ -1,67 +1,32 @@
-# ChainMind - AI-Powered Supply Chain Digital Twin
+# ChainMind 📦
+
+**An AI-Powered Supply Chain Digital Twin**  
 
 ## Overview
 
-ChainMind is a prototype web application simulating a supply chain digital twin. It uses React (Vite), Node.js (Express), Firebase (Auth & RTDB), and the Google Gemini API.
+ChainMind is a dynamic, real-time digital twin application designed to visualize, simulate, and optimize supply chain networks. By mapping physical warehouse nodes to a digital interface, users can inject localized demand surges and instantly receive actionable, context-aware intelligence powered by Google Gemini AI. The application ensures seamless data synchronization across the entire network, providing supply chain managers with a living snapshot of their operations to prevent shortages and optimize logistics.
+
+## Tech Stack
+
+- **Frontend**: React, Vite, Tailwind CSS v4, React Router, Lucide React (Icons)
+- **Backend**: Node.js, Express.js
+- **Database**: Firebase Realtime Database
+- **Authentication**: Firebase Auth (Email/Password & Google Sign-In)
+- **AI Integration**: Google Generative AI SDK (Gemini)
 
 ## Features
 
-- **Authentication**: Email/Password and Google Sign-In.
-- **Real-Time Dashboard**: Monitor 3 warehouse stock levels live using Firebase RTDB.
-- **Simulation Engine**: Triggers a 30% demand surge and dynamically calculates risk (< 80 stock).
-- **AI Insights**: Generates actionable recommendations via the Gemini API.
+- **Dynamic Network Mapping**: Configure custom warehouse locations and initial stock capacities through a guided setup wizard.
+- **Demand Surge Simulation**: Stress-test your network by targeting specific nodes with variable demand spikes.
+- **Real-Time Synchronization**: Live updates across all clients using Firebase Realtime Database.
+- **Gemini AI Intelligence**: Context-aware AI analysis that detects critical inventory levels (<80 units) and automatically recommends precise restocking or rerouting strategies.
+- **Fail-Safe Mock Intelligence**: Built-in exponential backoff and dynamic local mock generation ensures the dashboard continues providing actionable insights even during live API outages or high-demand throttling.
+- **Premium UI/UX**: A highly polished, modern interface featuring glassmorphism, responsive animations, and a sleek dark mode aesthetic.
 
-## Setup Instructions
+## Future Scope
 
-### 1. External Services Needed
-
-- **Firebase Project**:  
-  - Enable Authentication (Email/Password & Google).
-  - Enable Realtime Database and set rules to allow read/write (e.g., `".read": "auth != null", ".write": "auth != null"` for testing).
-  - Get the Web App Configuration.
-
-- **Google Gemini API Key**:
-  - Get a key from Google AI Studio.
-
-### 2. Configuration
-
-**Client (`/client/.env`)**
-
-```env
-VITE_FIREBASE_API_KEY="your-api-key"
-VITE_FIREBASE_AUTH_DOMAIN="your-auth-domain"
-VITE_FIREBASE_DATABASE_URL="your-database-url"
-VITE_FIREBASE_PROJECT_ID="your-project-id"
-VITE_FIREBASE_STORAGE_BUCKET="your-storage-bucket"
-VITE_FIREBASE_MESSAGING_SENDER_ID="your-messaging-sender-id"
-VITE_FIREBASE_APP_ID="your-app-id"
-```
-
-**Server (`/server/.env`)**
-
-```env
-PORT=5000
-GEMINI_API_KEY="your-gemini-api-key"
-```
-
-### 3. Running the App
-
-1. Open two terminal windows.
-2. **Start the backend server:**
-
-   ```bash
-   cd server
-   npm install
-   npm run start
-   # or node index.js
-   ```
-
-3. **Start the frontend client:**
-
-   ```bash
-   cd client
-   npm install
-   npm run dev
-   ```
-
-4. Open your browser to `http://localhost:5173`.
+- **AI Generated Mitigation Report**: Generates a detailed report on the mitigation strategies recommended by the AI.
+- **Predictive Analytics**: Implementing historical data tracking to forecast seasonal demand surges before they happen.
+- **Automated Restocking**: Integration with third-party logistics (3PL) APIs to automatically generate purchase orders when nodes hit critical thresholds.
+- **Multi-Tier Networks**: Expanding the digital twin to map complex hierarchical networks (e.g., Factories → Regional Hubs → Local Distribution Centers).
+- **Geospatial Visualization**: Upgrading the dashboard to map warehouses onto a live interactive map for true geographical routing and transit time optimization.
