@@ -20,12 +20,12 @@ ChainMind is a dynamic, real-time digital twin application designed to visualize
 - **Demand Surge Simulation**: Stress-test your network by targeting specific nodes with variable demand spikes.
 - **Real-Time Synchronization**: Live updates across all clients using Firebase Realtime Database.
 - **Gemini AI Intelligence**: Context-aware AI analysis that detects critical inventory levels (<80 units) and automatically recommends precise restocking or rerouting strategies.
+- **AI Generated Mitigation Report**: Generates a detailed report on the mitigation strategies recommended by the AI.
 - **Fail-Safe Mock Intelligence**: Built-in exponential backoff and dynamic local mock generation ensures the dashboard continues providing actionable insights even during live API outages or high-demand throttling.
 - **Premium UI/UX**: A highly polished, modern interface featuring glassmorphism, responsive animations, and a sleek dark mode aesthetic.
 
 ## Future Scope
 
-- **AI Generated Mitigation Report**: Generates a detailed report on the mitigation strategies recommended by the AI.
 - **Predictive Analytics**: Implementing historical data tracking to forecast seasonal demand surges before they happen.
 - **Automated Restocking**: Integration with third-party logistics (3PL) APIs to automatically generate purchase orders when nodes hit critical thresholds.
 - **Multi-Tier Networks**: Expanding the digital twin to map complex hierarchical networks (e.g., Factories → Regional Hubs → Local Distribution Centers).

@@ -120,6 +120,35 @@ app.post('/ai-insight', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// Mitigation Report Route
+app.post('/generate-mitigation-report', async (req, res) => {
+  try {
+    const { insight } = req.body;
+    if (!insight) {
+      return res.status(400).json({ error: 'Insight text is required' });
+    }
+
+    if (!genAI) {
+      return res.status(503).json({ error: 'Gemini API key not configured on server' });
+    }
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const prompt = `Read the following AI analysis of a supply chain scenario and generate a detailed Mitigation Report with proper step-by-step actions to resolve any critical issues. Format the report nicely in Markdown.\n\nAI Analysis:\n${insight}`;
+    
+    const result = await model.generateContent(prompt);
+    
+    if (result && result.response) {
+      const text = result.response.text();
+      return res.json({ report: text });
+    }
+    
+    res.status(500).json({ error: 'Failed to generate mitigation report' });
+  } catch (error) {
+    console.error("Mitigation Report Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health Check Route for Render
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'ChainMind API is running' });
