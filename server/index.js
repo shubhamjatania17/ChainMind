@@ -135,14 +135,57 @@ app.post('/generate-mitigation-report', async (req, res) => {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const prompt = `Read the following AI analysis of a supply chain scenario and generate a detailed Mitigation Report with proper step-by-step actions to resolve any critical issues. Format the report nicely in Markdown.\n\nAI Analysis:\n${insight}`;
     
-    const result = await model.generateContent(prompt);
+    let result;
+    let retries = 3;
+    let delay = 1000;
+    let apiSuccess = false;
     
-    if (result && result.response) {
+    while (retries > 0) {
+      try {
+        result = await model.generateContent(prompt);
+        apiSuccess = true;
+        break;
+      } catch (err) {
+        if (err.message.includes('503') || err.message.includes('high demand') || err.status === 503 || err.status === 429) {
+          retries--;
+          if (retries === 0) {
+            console.warn("Gemini API overloaded. Falling back to mock mitigation report.");
+            break;
+          }
+          console.warn(`Gemini API overloaded. Retrying mitigation report in ${delay}ms...`);
+          await new Promise(res => setTimeout(res, delay));
+          delay *= 2;
+        } else {
+          console.warn(`Gemini API Error: ${err.message}. Falling back to mock mitigation report.`);
+          break;
+        }
+      }
+    }
+
+    if (apiSuccess && result && result.response) {
       const text = result.response.text();
       return res.json({ report: text });
     }
     
-    res.status(500).json({ error: 'Failed to generate mitigation report' });
+    // Fallback: Generate a Mock Mitigation Report
+    const mockReport = `## ChainMind Mitigation Report (Mock Mode)
+
+*Notice: The live AI API is currently experiencing high demand. This is a locally generated fallback report.*
+
+### Phase 1: Immediate Stabilization (0-24 Hours)
+1. **Assess Critical Nodes**: Immediately quantify the deficit in warehouses showing <80 units.
+2. **Emergency Redistribution**: Reroute up to 20% of inventory from the nearest stable nodes.
+3. **Communication**: Alert local distribution centers about impending delays or stock limitations.
+
+### Phase 2: Restocking & Logistics (24-72 Hours)
+1. **Expedite Supplier Orders**: Trigger emergency purchase orders with key suppliers.
+2. **Prioritize Inbound Shipments**: Divert new incoming stock directly to the critical nodes.
+
+### Phase 3: Strategic Measures (Long-term)
+1. **Review Safety Stocks**: Re-evaluate safety stock levels to buffer against future surges.
+2. **Improve Forecasting**: Incorporate recent surge data into predictive models.`;
+
+    res.json({ report: mockReport });
   } catch (error) {
     console.error("Mitigation Report Error:", error);
     res.status(500).json({ error: error.message });
