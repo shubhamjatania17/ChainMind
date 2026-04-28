@@ -15,15 +15,17 @@ const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GE
 // Simulate Route
 app.post('/simulate', (req, res) => {
   try {
-    const { inventory } = req.body;
-    if (!inventory) {
-      return res.status(400).json({ error: 'Inventory data is required' });
+    const { inventory, targetCity, surgePercentage } = req.body;
+    if (!inventory || !targetCity || !surgePercentage) {
+      return res.status(400).json({ error: 'Inventory, targetCity, and surgePercentage are required' });
     }
 
-    const updatedInventory = {};
-    for (const [warehouse, stock] of Object.entries(inventory)) {
-      // Reduce stock by 30%
-      updatedInventory[warehouse] = Math.max(0, Math.floor(stock * 0.7));
+    const updatedInventory = { ...inventory };
+    
+    if (updatedInventory[targetCity]) {
+      const currentStock = updatedInventory[targetCity];
+      const reduction = Math.floor(currentStock * (surgePercentage / 100));
+      updatedInventory[targetCity] = Math.max(0, currentStock - reduction);
     }
 
     res.json({ updatedInventory });
@@ -35,7 +37,7 @@ app.post('/simulate', (req, res) => {
 // AI Insights Route
 app.post('/ai-insight', async (req, res) => {
   try {
-    const { inventory } = req.body;
+    const { inventory, targetCity, surgePercentage } = req.body;
     if (!inventory) {
       return res.status(400).json({ error: 'Inventory data is required' });
     }
@@ -46,8 +48,13 @@ app.post('/ai-insight', async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     
-    // As per the requirement prompt
-    const prompt = `Analyze this supply chain inventory scenario. Identify risks and suggest actions like stock redistribution or restocking.\n\nCurrent Inventory: ${JSON.stringify(inventory)}\nNote: Stock < 80 is considered at Risk.`;
+    // Add specific context if a simulation was just run
+    let eventContext = '';
+    if (targetCity && surgePercentage) {
+      eventContext = `A simulated demand surge of ${surgePercentage}% just occurred in ${targetCity}. `;
+    }
+
+    const prompt = `Analyze this supply chain inventory scenario. ${eventContext}Identify risks and suggest actions like stock redistribution or restocking.\n\nCurrent Inventory: ${JSON.stringify(inventory)}\nNote: Stock < 80 is considered at Risk.`;
     
     const result = await model.generateContent(prompt);
     const response = await result.response;
