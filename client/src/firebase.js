@@ -8,7 +8,7 @@ import {
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
-import { getDatabase, ref, onValue, set } from 'firebase/database';
+import { getDatabase, ref, onValue, set, remove } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -36,5 +36,6 @@ export {
   onAuthStateChanged,
   ref,
   onValue,
-  set
+  set,
+  remove
 };
