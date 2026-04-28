@@ -29,7 +29,10 @@ ChainMind is a dynamic, real-time digital twin application designed to visualize
 
 ## Deployed MVP Link
 
-[https://chainmind-fpb5.onrender.com] (ChainMind | Supply Chain Digital Twin)
+<https://chainmind-fpb5.onrender.com>
+
+## Demo Video
+<https://screenrec.com/share/m9aPJjvZ1R>
 
 ## Future Scope
 
