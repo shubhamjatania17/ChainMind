@@ -4,6 +4,8 @@ import { auth, onAuthStateChanged } from './firebase';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 
+import Home from './pages/Home';
+
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -18,8 +20,8 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-pulse text-xl font-semibold text-slate-600">Loading ChainMind...</div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-pulse text-xl font-display text-slate-300">Loading ChainMind...</div>
       </div>
     );
   }
@@ -27,9 +29,10 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={!user ? <Home /> : <Navigate to="/dashboard" />} />
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
         <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
-        <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
   );
