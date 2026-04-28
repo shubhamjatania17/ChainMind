@@ -56,7 +56,30 @@ app.post('/ai-insight', async (req, res) => {
 
     const prompt = `Analyze this supply chain inventory scenario. ${eventContext}Identify risks and suggest actions like stock redistribution or restocking.\n\nCurrent Inventory: ${JSON.stringify(inventory)}\nNote: Stock < 80 is considered at Risk.`;
     
-    const result = await model.generateContent(prompt);
+    let result;
+    let retries = 3;
+    let delay = 1000;
+    
+    while (retries > 0) {
+      try {
+        result = await model.generateContent(prompt);
+        break; // Success! Break out of the retry loop
+      } catch (err) {
+        // If it's a 503 High Demand error, retry
+        if (err.message.includes('503') || err.message.includes('high demand') || err.status === 503) {
+          retries--;
+          if (retries === 0) {
+            throw new Error("Google Gemini API is currently experiencing unusually high demand. Please wait a few seconds and try clicking 'Inject Surge' again.");
+          }
+          console.warn(`Gemini API 503 error. Retrying in ${delay}ms...`);
+          await new Promise(res => setTimeout(res, delay));
+          delay *= 2; // Exponential backoff: 1s, 2s, 4s...
+        } else {
+          throw err; // Other errors should fail immediately
+        }
+      }
+    }
+
     const response = await result.response;
     const text = response.text();
 
