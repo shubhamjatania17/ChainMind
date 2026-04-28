@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from '../firebase';
+import { getAdditionalUserInfo, deleteUser } from 'firebase/auth';
 import { PackageOpen, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 function Login() {
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(location.state?.isSignUp || false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +24,11 @@ function Login() {
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Authentication failed. Please try again.');
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+        setError('Account does not exist or invalid credentials. Please sign up first.');
+      } else {
+        setError(err.message || 'Authentication failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -31,7 +37,15 @@ function Login() {
   const handleGoogleSignIn = async () => {
     setError('');
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const details = getAdditionalUserInfo(result);
+      
+      // If user tries to "Sign In" but it's a completely new account, prevent it
+      if (details?.isNewUser && !isSignUp) {
+        // Delete the auto-created user to enforce sign-up
+        await deleteUser(result.user);
+        setError('No account found. Please switch to "Sign up" first to create an account.');
+      }
     } catch (err) {
       console.error(err);
       setError(err.message || 'Google Sign-In failed.');

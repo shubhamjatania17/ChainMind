@@ -24,7 +24,7 @@ function Home() {
             <Link to="/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">
               Sign In
             </Link>
-            <Link to="/login" className="px-5 py-2.5 text-sm font-semibold bg-white text-slate-900 rounded-lg hover:bg-slate-200 transition-colors shadow-lg">
+            <Link to="/login" state={{ isSignUp: true }} className="px-5 py-2.5 text-sm font-semibold bg-white text-slate-900 rounded-lg hover:bg-slate-200 transition-colors shadow-lg">
               Get Started
             </Link>
           </div>
@@ -53,6 +53,7 @@ function Home() {
           <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
             <Link 
               to="/login" 
+              state={{ isSignUp: true }}
               className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-lg shadow-xl shadow-blue-900/50 transition-all flex items-center justify-center space-x-2 group"
             >
               <span>Launch Dashboard</span>
