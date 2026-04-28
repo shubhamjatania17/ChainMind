@@ -26,7 +26,7 @@ function Dashboard({ user }) {
   const [downloadingPDF, setDownloadingPDF] = useState(false);
 
   useEffect(() => {
-    const inventoryRef = ref(database, 'inventory');
+    const inventoryRef = ref(database, `users/${user.uid}/inventory`);
     const unsubscribe = onValue(inventoryRef, (snapshot) => {
       const data = snapshot.val();
       setInventory(data); // Will be null if empty
@@ -40,7 +40,7 @@ function Dashboard({ user }) {
     });
 
     return () => unsubscribe();
-  }, [simTargetCity]);
+  }, [simTargetCity, user.uid]);
 
   const handleSetupCountChange = (e) => {
     const count = parseInt(e.target.value) || 1;
@@ -66,12 +66,12 @@ function Dashboard({ user }) {
     setupData.forEach(d => {
       newInventory[d.name.trim()] = parseInt(d.stock);
     });
-    await set(ref(database, 'inventory'), newInventory);
+    await set(ref(database, `users/${user.uid}/inventory`), newInventory);
   };
 
   const handleResetApp = async () => {
     if (window.confirm("Are you sure you want to reset the configuration and delete all warehouse data?")) {
-      await remove(ref(database, 'inventory'));
+      await remove(ref(database, `users/${user.uid}/inventory`));
       setSetupData([]);
       setInsight('');
     }
@@ -85,7 +85,7 @@ function Dashboard({ user }) {
       const payload = { inventory, targetCity: simTargetCity, surgePercentage: parseInt(simSurgePercent) };
       const response = await axios.post(`${API_URL}/simulate`, payload);
       const updatedStock = response.data.updatedInventory;
-      await set(ref(database, 'inventory'), updatedStock);
+      await set(ref(database, `users/${user.uid}/inventory`), updatedStock);
       fetchAIInsights(updatedStock, simTargetCity, simSurgePercent);
     } catch (error) {
       console.error('Simulation failed:', error);
