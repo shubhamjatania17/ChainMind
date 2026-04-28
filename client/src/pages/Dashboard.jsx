@@ -3,6 +3,7 @@ import { database, ref, onValue, set, remove, signOut, auth } from '../firebase'
 import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen } from 'lucide-react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 
 const API_URL = 'http://localhost:5000';
 
@@ -367,17 +368,35 @@ function Dashboard({ user }) {
                 <div className="h-4 bg-white/10 rounded-md w-full"></div>
               </div>
             ) : insight ? (
-              <div className="prose prose-invert prose-blue max-w-none text-slate-300 text-[15px] leading-relaxed">
-                {insight.split('\n').map((line, i) => {
-                  if (line.trim().startsWith('**')) {
-                    return <h4 key={i} className="text-white mt-6 mb-3 font-bold text-lg font-display flex items-center before:content-[''] before:block before:w-2 before:h-2 before:bg-blue-500 before:rounded-full before:mr-3">{line.replace(/\*\*/g, '')}</h4>;
-                  } else if (line.trim().startsWith('*')) {
-                    return <li key={i} className="ml-5 mb-2 list-disc marker:text-blue-500">{line.substring(1).trim().replace(/\*\*/g, '')}</li>;
-                  } else if (line.trim() !== '') {
-                    return <p key={i} className="mb-3">{line.replace(/\*\*/g, '')}</p>;
-                  }
-                  return null;
-                })}
+              <div className="prose prose-invert prose-blue max-w-none">
+                {/* eslint-disable no-unused-vars */}
+                <ReactMarkdown
+                  components={{
+                    h1: ({node, ...props}) => <h2 className="text-white mt-8 mb-4 font-bold text-2xl font-display flex items-center before:content-[''] before:block before:w-2 before:h-2 before:bg-blue-500 before:rounded-full before:mr-3" {...props} />,
+                    h2: ({node, ...props}) => <h3 className="text-white mt-6 mb-3 font-bold text-xl font-display flex items-center before:content-[''] before:block before:w-2 before:h-2 before:bg-blue-500 before:rounded-full before:mr-3" {...props} />,
+                    h3: ({node, ...props}) => <h4 className="text-white mt-5 mb-2 font-bold text-lg font-display flex items-center before:content-[''] before:block before:w-1.5 before:h-1.5 before:bg-blue-400 before:rounded-full before:mr-2" {...props} />,
+                    p: ({node, ...props}) => <p className="mb-4 text-slate-300 text-[15px] leading-relaxed" {...props} />,
+                    ul: ({node, ...props}) => <ul className="mb-4 space-y-2 ml-5 list-disc marker:text-blue-500" {...props} />,
+                    ol: ({node, ...props}) => <ol className="mb-4 space-y-2 ml-5 list-decimal marker:text-blue-500 text-slate-300" {...props} />,
+                    li: ({node, ...props}) => <li className="text-slate-300 text-[15px] leading-relaxed pl-1" {...props} />,
+                    strong: ({node, ...props}) => <strong className="text-white font-bold" {...props} />,
+                    em: ({node, ...props}) => <em className="text-blue-200 italic" {...props} />,
+                    code: ({node, inline, className, children, ...props}) => {
+                      return inline ? (
+                        <code className="bg-blue-500/10 text-blue-300 px-1.5 py-0.5 rounded text-sm font-mono border border-blue-500/20" {...props}>
+                          {children}
+                        </code>
+                      ) : (
+                        <code className="block bg-black/40 text-slate-300 p-4 rounded-xl text-sm font-mono border border-white/10 overflow-x-auto mb-4" {...props}>
+                          {children}
+                        </code>
+                      )
+                    }
+                  }}
+                >
+                  {insight}
+                </ReactMarkdown>
+                {/* eslint-enable no-unused-vars */}
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-500 py-10 opacity-70">
