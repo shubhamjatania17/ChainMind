@@ -101,6 +101,33 @@ function Home() {
         </div>
       </main>
 
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-white/10 bg-slate-950">
+        <div className="max-w-7xl mx-auto px-6 py-12">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center space-x-3 mb-6 md:mb-0">
+              <PackageOpen className="h-6 w-6 text-blue-500" />
+              <span className="text-xl font-bold tracking-tight font-display text-white">ChainMind</span>
+            </div>
+            
+            <div className="flex space-x-8 text-sm font-medium text-slate-400">
+              <a href="#" className="hover:text-white transition-colors">Features</a>
+              <a href="#" className="hover:text-white transition-colors">Pricing</a>
+              <a href="#" className="hover:text-white transition-colors">Documentation</a>
+              <a href="#" className="hover:text-white transition-colors">Contact</a>
+            </div>
+          </div>
+          
+          <div className="mt-8 pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500">
+            <p>&copy; {new Date().getFullYear()} ChainMind Systems. All rights reserved.</p>
+            <div className="flex space-x-6 mt-4 md:mt-0">
+              <a href="#" className="hover:text-slate-300 transition-colors">Privacy Policy</a>
+              <a href="#" className="hover:text-slate-300 transition-colors">Terms of Service</a>
+            </div>
+          </div>
+        </div>
+      </footer>
+
     </div>
   );
 }

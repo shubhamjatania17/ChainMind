@@ -237,7 +237,7 @@ function Dashboard({ user }) {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 bg-slate-900/50 backdrop-blur-xl border-b border-white/5 sticky top-0">
+      <header className="relative z-50 bg-slate-900/50 backdrop-blur-xl border-b border-white/5 sticky top-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <Link to="/" className="h-10 w-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 hover:scale-105 transition-transform">
