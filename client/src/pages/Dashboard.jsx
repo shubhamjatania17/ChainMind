@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, Re
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -48,8 +49,11 @@ function Dashboard({ user }) {
   useEffect(() => {
     if (dbLoaded && (!inventory || Object.keys(inventory).length === 0)) {
       if (!isConfigModalOpen) {
-        setModalData([{ name: '', stock: '' }]);
-        setIsConfigModalOpen(true);
+        const timer = setTimeout(() => {
+          setModalData([{ name: '', stock: '' }]);
+          setIsConfigModalOpen(true);
+        }, 0);
+        return () => clearTimeout(timer);
       }
     }
   }, [dbLoaded, inventory, isConfigModalOpen]);
@@ -187,7 +191,7 @@ function Dashboard({ user }) {
       <header className="sticky top-0 z-50 bg-slate-900/50 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-3">
-            <Link to="/" className="h-10 w-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 hover:scale-105 transition-transform">
+            <Link to="/" className="h-10 w-10 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 hover:scale-105 transition-transform">
                <PackageOpen className="h-6 w-6 text-white" />
             </Link>
             <h1 className="text-xl sm:text-2xl font-bold text-white font-display tracking-tight">ChainMind</h1>
@@ -272,7 +276,7 @@ function Dashboard({ user }) {
               <button 
                 onClick={handleSimulate}
                 disabled={simulating || !inventory || Object.keys(inventory).length === 0}
-                className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed group"
+                className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed group"
               >
                 {simulating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Activity className="h-5 w-5 group-hover:scale-110 transition-transform" />}
                 <span>{simulating ? 'Processing...' : 'Inject Surge'}</span>
@@ -294,7 +298,7 @@ function Dashboard({ user }) {
                 </p>
                 <button
                   onClick={openConfigModal}
-                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center space-x-2 animate-pulse hover:animate-none"
+                  className="px-5 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center space-x-2 animate-pulse hover:animate-none"
                 >
                   <Settings className="h-4 w-4" />
                   <span>Configure Network</span>
@@ -335,7 +339,7 @@ function Dashboard({ user }) {
 
         {/* AI Insight Panel */}
         <div className="bg-slate-900/60 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/10 overflow-hidden relative">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
           
           <div className="px-8 py-5 border-b border-white/5 flex justify-between items-center bg-white/5">
             <div className="flex items-center space-x-3 text-white">
@@ -365,6 +369,7 @@ function Dashboard({ user }) {
               <div className="prose prose-invert prose-blue max-w-none">
                 {/* eslint-disable no-unused-vars */}
                 <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
                   components={{
                     h1: ({node, ...props}) => <h2 className="text-white mt-8 mb-4 font-bold text-2xl font-display flex items-center before:content-[''] before:block before:w-2 before:h-2 before:bg-blue-500 before:rounded-full before:mr-3" {...props} />,
                     h2: ({node, ...props}) => <h3 className="text-white mt-6 mb-3 font-bold text-xl font-display flex items-center before:content-[''] before:block before:w-2 before:h-2 before:bg-blue-500 before:rounded-full before:mr-3" {...props} />,
@@ -375,6 +380,20 @@ function Dashboard({ user }) {
                     li: ({node, ...props}) => <li className="text-slate-300 text-[15px] leading-relaxed pl-1" {...props} />,
                     strong: ({node, ...props}) => <strong className="text-white font-bold" {...props} />,
                     em: ({node, ...props}) => <em className="text-blue-200 italic" {...props} />,
+                    table: ({node, ...props}) => (
+                      <div className="overflow-x-auto my-6 rounded-2xl border border-white/10 shadow-lg">
+                        <table className="min-w-full divide-y divide-white/10 bg-slate-900/40 backdrop-blur-md" {...props} />
+                      </div>
+                    ),
+                    thead: ({node, ...props}) => <thead className="bg-white/5" {...props} />,
+                    tbody: ({node, ...props}) => <tbody className="divide-y divide-white/5" {...props} />,
+                    tr: ({node, ...props}) => <tr className="hover:bg-white/5 transition-colors" {...props} />,
+                    th: ({node, ...props}) => (
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-300 uppercase tracking-wider" {...props} />
+                    ),
+                    td: ({node, ...props}) => (
+                      <td className="px-4 py-3 text-sm text-slate-300 font-medium animate-fade-in" {...props} />
+                    ),
                     code: ({node, inline, className, children, ...props}) => {
                       return inline ? (
                         <code className="bg-blue-500/10 text-blue-300 px-1.5 py-0.5 rounded text-sm font-mono border border-blue-500/20" {...props}>
@@ -396,7 +415,7 @@ function Dashboard({ user }) {
                   <button 
                     onClick={handleDownloadMitigationReport}
                     disabled={downloadingPDF}
-                    className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed group"
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed group"
                   >
                     {downloadingPDF ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5 group-hover:-translate-y-1 transition-transform" />}
                     <span>{downloadingPDF ? 'Generating PDF...' : 'Download Mitigation Report'}</span>
@@ -487,7 +506,7 @@ function Dashboard({ user }) {
                 )}
                 <button 
                   onClick={handleSaveConfig}
-                  className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
+                  className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
                 >
                   Save Changes
                 </button>
