@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { database, ref, onValue, set, remove, signOut, auth } from '../firebase';
-import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download, Plus, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -11,9 +11,9 @@ function Dashboard({ user }) {
   const [inventory, setInventory] = useState(null);
   const [dbLoaded, setDbLoaded] = useState(false);
   
-  // Setup State
-  const [setupCount, setSetupCount] = useState(3);
-  const [setupData, setSetupData] = useState([]);
+  // Config Modal State
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [modalData, setModalData] = useState([]);
 
   // Simulation State
   const [simTargetCity, setSimTargetCity] = useState('');
@@ -35,6 +35,8 @@ function Dashboard({ user }) {
         if (!simTargetCity || !Object.keys(data).includes(simTargetCity)) {
           setSimTargetCity(Object.keys(data)[0]);
         }
+      } else {
+        setSimTargetCity('');
       }
       setDbLoaded(true);
     });
@@ -42,37 +44,69 @@ function Dashboard({ user }) {
     return () => unsubscribe();
   }, [simTargetCity, user.uid]);
 
-  const handleSetupCountChange = (e) => {
-    const count = parseInt(e.target.value) || 1;
-    setSetupCount(count);
+  // Auto-open modal if inventory is loaded and empty
+  useEffect(() => {
+    if (dbLoaded && (!inventory || Object.keys(inventory).length === 0)) {
+      if (!isConfigModalOpen) {
+        setModalData([{ name: '', stock: '' }]);
+        setIsConfigModalOpen(true);
+      }
+    }
+  }, [dbLoaded, inventory, isConfigModalOpen]);
+
+  const openConfigModal = () => {
+    if (inventory && Object.keys(inventory).length > 0) {
+      setModalData(Object.entries(inventory).map(([name, stock]) => ({ name, stock })));
+    } else {
+      setModalData([{ name: '', stock: '' }]);
+    }
+    setIsConfigModalOpen(true);
   };
 
-  const handleGenerateInputs = () => {
-    setSetupData(Array.from({ length: setupCount }, () => ({ name: '', stock: '' })));
+  const handleAddWarehouse = () => {
+    setModalData([...modalData, { name: '', stock: '' }]);
   };
 
-  const handleSetupDataChange = (index, field, value) => {
-    const newData = [...setupData];
+  const handleDeleteWarehouse = (index) => {
+    setModalData(modalData.filter((_, i) => i !== index));
+  };
+
+  const handleModalDataChange = (index, field, value) => {
+    const newData = [...modalData];
     newData[index][field] = value;
-    setSetupData(newData);
+    setModalData(newData);
   };
 
-  const handleSaveSetup = async () => {
-    if (setupData.some(d => !d.name.trim() || d.stock === '')) {
+  const handleSaveConfig = async () => {
+    if (modalData.length === 0) {
+      alert("Please add at least one warehouse.");
+      return;
+    }
+    if (modalData.some(d => !d.name.trim() || d.stock === '')) {
       alert("Please fill in all city names and stock amounts.");
       return;
     }
+
+    // Check for duplicate names
+    const names = modalData.map(d => d.name.trim().toLowerCase());
+    const hasDuplicates = names.some((name, idx) => names.indexOf(name) !== idx);
+    if (hasDuplicates) {
+      alert("Each warehouse must have a unique name.");
+      return;
+    }
+
     const newInventory = {};
-    setupData.forEach(d => {
+    modalData.forEach(d => {
       newInventory[d.name.trim()] = parseInt(d.stock);
     });
+
     await set(ref(database, `users/${user.uid}/inventory`), newInventory);
+    setIsConfigModalOpen(false);
   };
 
   const handleResetApp = async () => {
     if (window.confirm("Are you sure you want to reset the configuration and delete all warehouse data?")) {
       await remove(ref(database, `users/${user.uid}/inventory`));
-      setSetupData([]);
       setInsight('');
     }
   };
@@ -140,93 +174,6 @@ function Dashboard({ user }) {
     );
   }
 
-  // === SETUP MODE UI ===
-  if (!inventory) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans overflow-hidden">
-        {/* BG Effects */}
-        <div className="fixed inset-0 z-0 pointer-events-none">
-          <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]"></div>
-          <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-600/10 blur-[120px]"></div>
-        </div>
-
-        <div className="max-w-xl w-full space-y-8 bg-white/5 backdrop-blur-xl p-10 rounded-3xl shadow-2xl border border-white/10 relative z-10">
-          <div className="text-center">
-            <div className="mx-auto h-16 w-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 mb-6">
-               <Settings className="h-8 w-8 text-white" />
-            </div>
-            <h2 className="text-3xl font-extrabold text-white font-display tracking-tight">System Configuration</h2>
-            <p className="mt-2 text-sm text-slate-400">Map your physical warehouse network to the digital twin.</p>
-          </div>
-
-          {setupData.length === 0 ? (
-            <div className="mt-8 space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-300">Number of Warehouses</label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  value={setupCount} 
-                  onChange={handleSetupCountChange}
-                  className="mt-2 block w-full px-4 py-3 border border-white/10 rounded-xl bg-black/20 text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm transition-all"
-                />
-              </div>
-              <button 
-                onClick={handleGenerateInputs}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
-              >
-                Configure Network
-              </button>
-            </div>
-          ) : (
-            <div className="mt-8 space-y-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
-              {setupData.map((data, index) => (
-                <div key={index} className="flex flex-col sm:flex-row gap-4 p-4 bg-black/20 rounded-xl border border-white/5">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-400">City Name</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Mumbai"
-                      value={data.name}
-                      onChange={(e) => handleSetupDataChange(index, 'name', e.target.value)}
-                      className="mt-1 block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-400">Initial Stock</label>
-                    <input 
-                      type="number" 
-                      min="0"
-                      placeholder="e.g. 100"
-                      value={data.stock}
-                      onChange={(e) => handleSetupDataChange(index, 'stock', e.target.value)}
-                      className="mt-1 block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                  </div>
-                </div>
-              ))}
-              <div className="pt-4 flex flex-col sm:flex-row gap-4">
-                <button 
-                  onClick={() => setSetupData([])}
-                  className="flex-1 py-3 px-4 border border-white/10 rounded-xl shadow-sm text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
-                >
-                  Back
-                </button>
-                <button 
-                  onClick={handleSaveSetup}
-                  className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
-                >
-                  Launch Twin
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // === DASHBOARD UI ===
   return (
     <div className="min-h-screen bg-slate-950 font-sans text-slate-200">
       
@@ -237,7 +184,7 @@ function Dashboard({ user }) {
       </div>
 
       {/* Header */}
-      <header className="relative z-50 bg-slate-900/50 backdrop-blur-xl border-b border-white/5 sticky top-0">
+      <header className="sticky top-0 z-50 bg-slate-900/50 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <Link to="/" className="h-10 w-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 hover:scale-105 transition-transform">
@@ -250,6 +197,14 @@ function Dashboard({ user }) {
               <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></div>
               <span className="text-xs font-medium text-slate-300">{user?.email}</span>
             </div>
+            <button 
+              onClick={openConfigModal}
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all text-sm font-medium group"
+              title="Configure Network"
+            >
+              <Settings className="h-4 w-4 group-hover:rotate-45 transition-transform duration-300" />
+              <span className="hidden sm:inline">Configure Network</span>
+            </button>
             <button 
               onClick={handleResetApp}
               className="flex items-center space-x-1 px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all text-sm font-medium group"
@@ -290,10 +245,11 @@ function Dashboard({ user }) {
               <select 
                 value={simTargetCity}
                 onChange={(e) => setSimTargetCity(e.target.value)}
-                className="block w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm appearance-none cursor-pointer hover:bg-white/10 transition-colors"
+                disabled={!inventory || Object.keys(inventory).length === 0}
+                className="block w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm appearance-none cursor-pointer hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em`, paddingRight: `2.5rem` }}
               >
-                {Object.keys(inventory).map(city => (
+                {Object.keys(inventory || {}).map(city => (
                   <option key={city} value={city} className="bg-slate-800 text-white">{city}</option>
                 ))}
               </select>
@@ -307,14 +263,15 @@ function Dashboard({ user }) {
                 max="100"
                 value={simSurgePercent}
                 onChange={(e) => setSimSurgePercent(e.target.value)}
-                className="block w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm transition-colors"
+                disabled={!inventory || Object.keys(inventory).length === 0}
+                className="block w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
 
             <div className="w-full md:w-1/3">
               <button 
                 onClick={handleSimulate}
-                disabled={simulating}
+                disabled={simulating || !inventory || Object.keys(inventory).length === 0}
                 className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed group"
               >
                 {simulating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Activity className="h-5 w-5 group-hover:scale-110 transition-transform" />}
@@ -328,34 +285,51 @@ function Dashboard({ user }) {
         <div>
           <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 ml-2">Global Network Status</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {Object.entries(inventory).map(([warehouse, stock]) => {
-              const isRisk = stock < 80;
-              return (
-                <div key={warehouse} className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 ${warehouse === simTargetCity ? 'border-blue-500/50 shadow-blue-500/10' : 'border-white/5 hover:border-white/20'}`}>
-                  
-                  {/* Danger Glow Effect */}
-                  {isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none"></div>}
-                  {warehouse === simTargetCity && !isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>}
+            {!inventory || Object.keys(inventory).length === 0 ? (
+              <div className="col-span-full bg-slate-900/40 backdrop-blur-md rounded-3xl p-8 border border-dashed border-white/10 text-center py-12 flex flex-col items-center">
+                <PackageOpen className="h-12 w-12 text-slate-500 mb-3" />
+                <h4 className="text-lg font-bold text-white mb-1">No Warehouses Configured</h4>
+                <p className="text-slate-400 text-sm max-w-md mb-6">
+                  Set up your physical warehouse locations to begin simulation and generate insights.
+                </p>
+                <button
+                  onClick={openConfigModal}
+                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center space-x-2 animate-pulse hover:animate-none"
+                >
+                  <Settings className="h-4 w-4" />
+                  <span>Configure Network</span>
+                </button>
+              </div>
+            ) : (
+              Object.entries(inventory).map(([warehouse, stock]) => {
+                const isRisk = stock < 80;
+                return (
+                  <div key={warehouse} className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 ${warehouse === simTargetCity ? 'border-blue-500/50 shadow-blue-500/10' : 'border-white/5 hover:border-white/20'}`}>
+                    
+                    {/* Danger Glow Effect */}
+                    {isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none"></div>}
+                    {warehouse === simTargetCity && !isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>}
 
-                  <div className="flex justify-between items-start relative z-10">
-                    <div className="overflow-hidden pr-2">
-                      <h3 className="text-xl font-bold text-white font-display truncate" title={warehouse}>{warehouse}</h3>
-                      <p className="text-slate-500 text-xs mt-1 uppercase tracking-wider font-semibold">Active Node</p>
+                    <div className="flex justify-between items-start relative z-10">
+                      <div className="overflow-hidden pr-2">
+                        <h3 className="text-xl font-bold text-white font-display truncate" title={warehouse}>{warehouse}</h3>
+                        <p className="text-slate-500 text-xs mt-1 uppercase tracking-wider font-semibold">Active Node</p>
+                      </div>
+                      <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm ${isRisk ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                        {isRisk ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
+                        <span>{isRisk ? 'Critical' : 'Stable'}</span>
+                      </div>
                     </div>
-                    <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm ${isRisk ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
-                      {isRisk ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
-                      <span>{isRisk ? 'Critical' : 'Stable'}</span>
+                    <div className="mt-8 flex items-baseline space-x-2 relative z-10">
+                      <span className={`text-5xl font-extrabold tracking-tight font-display ${isRisk ? 'text-red-400' : 'text-white'}`}>
+                        {stock}
+                      </span>
+                      <span className="text-slate-500 text-sm font-medium">units</span>
                     </div>
                   </div>
-                  <div className="mt-8 flex items-baseline space-x-2 relative z-10">
-                    <span className={`text-5xl font-extrabold tracking-tight font-display ${isRisk ? 'text-red-400' : 'text-white'}`}>
-                      {stock}
-                    </span>
-                    <span className="text-slate-500 text-sm font-medium">units</span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -439,6 +413,89 @@ function Dashboard({ user }) {
         </div>
 
       </main>
+      
+      {/* Modal Dialog */}
+      {isConfigModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="relative w-full max-w-xl bg-slate-900/90 backdrop-blur-xl border border-white/10 p-6 sm:p-8 rounded-3xl shadow-2xl flex flex-col max-h-[85vh] animate-in fade-in duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-blue-500/20 rounded-xl">
+                  <Settings className="h-6 w-6 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white font-display">Configure Warehouse Network</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Add, update, or remove warehouses in your digital twin.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 my-4 space-y-4 custom-scrollbar">
+              {modalData.map((data, index) => (
+                <div key={index} className="flex items-center gap-3 p-3 bg-black/20 rounded-2xl border border-white/5">
+                  <div className="flex-1 min-w-0">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">City Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Mumbai"
+                      value={data.name}
+                      onChange={(e) => handleModalDataChange(index, 'name', e.target.value)}
+                      className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                    />
+                  </div>
+                  <div className="w-28">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Initial Stock</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      placeholder="e.g. 100"
+                      value={data.stock}
+                      onChange={(e) => handleModalDataChange(index, 'stock', e.target.value)}
+                      className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                    />
+                  </div>
+                  <div className="pt-5">
+                    <button 
+                      onClick={() => handleDeleteWarehouse(index)}
+                      className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                      title="Remove Warehouse"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 flex flex-col gap-4">
+              <button 
+                onClick={handleAddWarehouse}
+                className="w-full py-2.5 px-4 border border-dashed border-white/10 rounded-xl hover:border-white/20 text-sm font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center space-x-1.5"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Warehouse</span>
+              </button>
+
+              <div className="flex gap-3 pt-2 border-t border-white/5">
+                {inventory && Object.keys(inventory).length > 0 && (
+                  <button 
+                    onClick={() => setIsConfigModalOpen(false)}
+                    className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button 
+                  onClick={handleSaveConfig}
+                  className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
