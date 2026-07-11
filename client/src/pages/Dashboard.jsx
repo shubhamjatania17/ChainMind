@@ -15,7 +15,6 @@ function Dashboard({ user }) {
   // Config Modal State
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [modalData, setModalData] = useState([]);
-  const [hasAutoOpened, setHasAutoOpened] = useState(false);
   const [configError, setConfigError] = useState('');
 
   // Simulation State
@@ -80,19 +79,7 @@ function Dashboard({ user }) {
     return () => unsubscribe();
   }, [simTargetCity, user.uid]);
 
-  // Auto-open modal if inventory is loaded and empty
-  useEffect(() => {
-    if (dbLoaded && (!inventory || Object.keys(inventory).length === 0)) {
-      if (!isConfigModalOpen && !hasAutoOpened) {
-        const timer = setTimeout(() => {
-          setModalData([{ name: '', stock: '' }]);
-          setIsConfigModalOpen(true);
-          setHasAutoOpened(true);
-        }, 0);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [dbLoaded, inventory, isConfigModalOpen, hasAutoOpened]);
+
 
   const openConfigModal = () => {
     setConfigError('');
@@ -153,7 +140,6 @@ function Dashboard({ user }) {
     if (confirmed) {
       await remove(ref(database, `users/${user.uid}/inventory`));
       setInsight('');
-      setHasAutoOpened(false);
     }
   };
 
