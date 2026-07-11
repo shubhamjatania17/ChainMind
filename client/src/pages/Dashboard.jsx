@@ -16,6 +16,7 @@ function Dashboard({ user }) {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [modalData, setModalData] = useState([]);
   const [configError, setConfigError] = useState('');
+  const [configStep, setConfigStep] = useState(1);
 
   // Simulation State
   const [simTargetCity, setSimTargetCity] = useState('');
@@ -106,6 +107,7 @@ function Dashboard({ user }) {
 
   const openConfigModal = () => {
     setConfigError('');
+    setConfigStep(1); // Start on Page 1
     if (inventory && Object.keys(inventory).length > 0) {
       setModalData(
         Object.entries(inventory).map(([name, node]) => ({
@@ -116,14 +118,14 @@ function Dashboard({ user }) {
         }))
       );
     } else {
-      setModalData([{ name: '', stock: '', type: 'local_dc', parent: '' }]);
+      setModalData([{ name: '', stock: '100', type: 'local_dc', parent: '' }]);
     }
     setIsConfigModalOpen(true);
   };
 
   const handleAddWarehouse = () => {
     if (configError) setConfigError('');
-    setModalData([...modalData, { name: '', stock: '', type: 'local_dc', parent: '' }]);
+    setModalData([...modalData, { name: '', stock: '100', type: 'local_dc', parent: '' }]);
   };
 
   const handleDeleteWarehouse = (index) => {
@@ -175,13 +177,13 @@ function Dashboard({ user }) {
     });
   };
 
-  const handleSaveConfig = async () => {
+  const handleNextStep = () => {
     if (modalData.length === 0) {
-      setConfigError("Please add at least one warehouse.");
+      setConfigError("Please add at least one storage location.");
       return;
     }
-    if (modalData.some(d => !d.name.trim() || d.stock === '')) {
-      setConfigError("Please fill in all city names and stock amounts.");
+    if (modalData.some(d => !d.name.trim())) {
+      setConfigError("Please fill in all storage location names.");
       return;
     }
 
@@ -189,7 +191,29 @@ function Dashboard({ user }) {
     const names = modalData.map(d => d.name.trim().toLowerCase());
     const hasDuplicates = names.some((name, idx) => names.indexOf(name) !== idx);
     if (hasDuplicates) {
-      setConfigError("Each warehouse must have a unique name.");
+      setConfigError("Each storage location must have a unique name.");
+      return;
+    }
+
+    setConfigError('');
+    setConfigStep(2);
+  };
+
+  const handleSaveConfig = async () => {
+    if (modalData.length === 0) {
+      setConfigError("Please add at least one storage location.");
+      return;
+    }
+    if (modalData.some(d => !d.name.trim() || d.stock === '')) {
+      setConfigError("Please fill in all storage location details and stock amounts.");
+      return;
+    }
+
+    // Check for duplicate names
+    const names = modalData.map(d => d.name.trim().toLowerCase());
+    const hasDuplicates = names.some((name, idx) => names.indexOf(name) !== idx);
+    if (hasDuplicates) {
+      setConfigError("Each storage location must have a unique name.");
       return;
     }
 
@@ -215,7 +239,7 @@ function Dashboard({ user }) {
   };
 
   const handleResetApp = async () => {
-    const confirmed = await showCustomConfirm("Are you sure you want to reset the configuration and delete all warehouse data?");
+    const confirmed = await showCustomConfirm("Are you sure you want to reset the configuration and delete all storage location data?");
     if (confirmed) {
       await remove(ref(database, `users/${user.uid}/inventory`));
       setInsight('');
@@ -316,18 +340,18 @@ function Dashboard({ user }) {
             <button 
               onClick={openConfigModal}
               className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all text-sm font-medium group"
-              title="Configure Network"
+              title="Configure Storage Locations"
             >
               <Settings className="h-4 w-4 group-hover:rotate-45 transition-transform duration-300" />
-              <span className="hidden sm:inline">Configure Network</span>
+              <span className="hidden sm:inline">Configure Storage Locations</span>
             </button>
             <button 
               onClick={handleResetApp}
               className="flex items-center space-x-1 px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all text-sm font-medium group"
-              title="Factory Reset"
+              title="Reset Locations"
             >
               <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
-              <span className="hidden sm:inline">Reset Network</span>
+              <span className="hidden sm:inline">Reset Locations</span>
             </button>
             <button 
               onClick={handleLogout}
@@ -357,7 +381,7 @@ function Dashboard({ user }) {
           
           <div className="flex flex-col md:flex-row items-end space-y-4 md:space-y-0 md:space-x-4 bg-black/20 p-5 rounded-2xl border border-white/5 relative z-10">
             <div className="w-full md:w-1/3">
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Target Node</label>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Target Storage Location</label>
               <select 
                 value={simTargetCity}
                 onChange={(e) => setSimTargetCity(e.target.value)}
@@ -421,20 +445,20 @@ function Dashboard({ user }) {
 
         {/* Warehouse Network Cards */}
         <div>
-          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 ml-2">Global Network Status</h3>
+          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 ml-2">Global Storage Location Status</h3>
           {!inventory || Object.keys(inventory).length === 0 ? (
             <div className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-8 border border-dashed border-white/10 text-center py-12 flex flex-col items-center">
               <PackageOpen className="h-12 w-12 text-slate-500 mb-3" />
-              <h4 className="text-lg font-bold text-white mb-1">No Warehouses Configured</h4>
+              <h4 className="text-lg font-bold text-white mb-1">No Storage Locations Configured</h4>
               <p className="text-slate-400 text-sm max-w-md mb-6">
-                Set up your physical warehouse locations to begin simulation and generate insights.
+                Set up your physical storage locations to begin simulation and generate insights.
               </p>
               <button
                 onClick={openConfigModal}
                 className="px-5 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center space-x-2 animate-pulse hover:animate-none"
               >
                 <Settings className="h-4 w-4" />
-                <span>Configure Network</span>
+                <span>Configure Storage Locations</span>
               </button>
             </div>
           ) : (
@@ -456,7 +480,7 @@ function Dashboard({ user }) {
                             <div className="overflow-hidden pr-2">
                               <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{name}</h3>
                               <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
-                                Independent Source Node
+                                Independent Source Location
                               </p>
                             </div>
                             <div className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
@@ -501,7 +525,7 @@ function Dashboard({ user }) {
                                   </p>
                                 ) : (
                                   <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
-                                    Independent Hub Node
+                                    Independent Hub Location
                                   </p>
                                 )}
                               </div>
@@ -548,7 +572,7 @@ function Dashboard({ user }) {
                                   </p>
                                 ) : (
                                   <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
-                                    Independent DC Node
+                                    Independent DC Location
                                   </p>
                                 )}
                               </div>
@@ -679,8 +703,12 @@ function Dashboard({ user }) {
                   <Settings className="h-6 w-6 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white font-display">Configure Warehouse Network</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Add, update, or remove warehouses in your digital twin.</p>
+                  <h3 className="text-xl font-bold text-white font-display">
+                    {configStep === 1 ? "Configure Storage Locations" : "Configure Location Details"}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {configStep === 1 ? "Add or remove physical storage locations in your supply chain network." : "Configure settings (Type, Stock, Parent) for each storage location."}
+                  </p>
                 </div>
               </div>
               <button 
@@ -693,88 +721,102 @@ function Dashboard({ user }) {
             </div>
 
             <div className="flex-1 overflow-y-auto pr-1 my-4 space-y-4 custom-scrollbar">
-              {modalData.map((data, index) => {
-                const validParents = getValidParents(index);
-                return (
-                  <div key={index} className="p-4 bg-black/20 rounded-2xl border border-white/5 space-y-3 relative">
-                    {/* Top Row: Name and Delete button */}
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex-1">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Node Name</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. Mumbai"
-                          value={data.name}
-                          onChange={(e) => handleModalDataChange(index, 'name', e.target.value)}
-                          className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
-                        />
-                      </div>
-                      <div className="pt-5">
-                        <button 
-                          onClick={() => handleDeleteWarehouse(index)}
-                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                          title="Remove Node"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+              {configStep === 1 ? (
+                // Step 1: Configure names only
+                modalData.map((data, index) => (
+                  <div key={index} className="flex items-center gap-3 p-4 bg-black/20 rounded-2xl border border-white/5 relative">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Storage Location Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Mumbai"
+                        value={data.name}
+                        onChange={(e) => handleModalDataChange(index, 'name', e.target.value)}
+                        className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                      />
                     </div>
-
-                    {/* Bottom Row: Tier, Stock, Parent */}
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tier / Type</label>
-                        <select 
-                          value={data.type || 'local_dc'}
-                          onChange={(e) => handleModalDataChange(index, 'type', e.target.value)}
-                          className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer"
-                        >
-                          <option value="factory">Factory (T1)</option>
-                          <option value="regional_hub">Regional Hub (T2)</option>
-                          <option value="local_dc">Local DC (T3)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Stock</label>
-                        <input 
-                          type="number" 
-                          min="0"
-                          placeholder="100"
-                          value={data.stock}
-                          onChange={(e) => handleModalDataChange(index, 'stock', e.target.value)}
-                          className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Parent Node</label>
-                        <select 
-                          value={data.parent || ''}
-                          disabled={data.type === 'factory' || validParents.length === 0}
-                          onChange={(e) => handleModalDataChange(index, 'parent', e.target.value)}
-                          className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <option value="">None</option>
-                          {validParents.map(parentOpt => (
-                            <option key={parentOpt.name} value={parentOpt.name}>
-                              {parentOpt.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    <div className="pt-5">
+                      <button 
+                        onClick={() => handleDeleteWarehouse(index)}
+                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                        title="Remove Storage Location"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
-                );
-              })}
+                ))
+              ) : (
+                // Step 2: Configure Details below the name
+                modalData.map((data, index) => {
+                  const validParents = getValidParents(index);
+                  return (
+                    <div key={index} className="p-4 bg-black/20 rounded-2xl border border-white/5 space-y-3 relative animate-in fade-in duration-200">
+                      <div className="flex justify-between items-center">
+                        <h4 className="text-sm font-bold text-white uppercase tracking-wider">{data.name}</h4>
+                        <span className="text-[10px] text-slate-500 font-semibold uppercase">Configure Details</span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3">
+                        {/* Tier / Type */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tier / Type</label>
+                          <select 
+                            value={data.type || 'local_dc'}
+                            onChange={(e) => handleModalDataChange(index, 'type', e.target.value)}
+                            className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer"
+                          >
+                            <option value="factory">Factory (T1)</option>
+                            <option value="regional_hub">Regional Hub (T2)</option>
+                            <option value="local_dc">Local DC (T3)</option>
+                          </select>
+                        </div>
+                        {/* Stock */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Stock</label>
+                          <input 
+                            type="number" 
+                            min="0"
+                            placeholder="100"
+                            value={data.stock}
+                            onChange={(e) => handleModalDataChange(index, 'stock', e.target.value)}
+                            className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                          />
+                        </div>
+                        {/* Parent Storage Location */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Parent Location</label>
+                          <select 
+                            value={data.parent || ''}
+                            disabled={data.type === 'factory' || validParents.length === 0}
+                            onChange={(e) => handleModalDataChange(index, 'parent', e.target.value)}
+                            className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <option value="">None</option>
+                            {validParents.map(parentOpt => (
+                              <option key={parentOpt.name} value={parentOpt.name}>
+                                {parentOpt.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             <div className="pt-2 flex flex-col gap-4">
-              <button 
-                onClick={handleAddWarehouse}
-                className="w-full py-2.5 px-4 border border-dashed border-white/10 rounded-xl hover:border-white/20 text-sm font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center space-x-1.5"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Add Warehouse</span>
-              </button>
+              {configStep === 1 && (
+                <button 
+                  onClick={handleAddWarehouse}
+                  className="w-full py-2.5 px-4 border border-dashed border-white/10 rounded-xl hover:border-white/20 text-sm font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center space-x-1.5"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Storage Location</span>
+                </button>
+              )}
 
               {configError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center space-x-2 text-red-400 text-xs font-medium animate-in fade-in duration-150">
@@ -784,18 +826,37 @@ function Dashboard({ user }) {
               )}
 
               <div className="flex gap-3 pt-2 border-t border-white/5">
-                <button 
-                  onClick={() => setIsConfigModalOpen(false)}
-                  className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handleSaveConfig}
-                  className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
-                >
-                  Save Changes
-                </button>
+                {configStep === 1 ? (
+                  <>
+                    <button 
+                      onClick={() => setIsConfigModalOpen(false)}
+                      className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handleNextStep}
+                      className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
+                    >
+                      Next: Configure Details
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => setConfigStep(1)}
+                      className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
+                    >
+                      Back to Locations
+                    </button>
+                    <button 
+                      onClick={handleSaveConfig}
+                      className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
+                    >
+                      Save Changes
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
