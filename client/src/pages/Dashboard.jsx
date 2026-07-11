@@ -696,69 +696,71 @@ function Dashboard({ user }) {
               {modalData.map((data, index) => {
                 const validParents = getValidParents(index);
                 return (
-                  <div key={index} className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-black/20 rounded-2xl border border-white/5">
-                    {/* Node Name */}
-                    <div className="flex-1 min-w-0">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Node Name</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Mumbai"
-                        value={data.name}
-                        onChange={(e) => handleModalDataChange(index, 'name', e.target.value)}
-                        className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
-                      />
+                  <div key={index} className="p-4 bg-black/20 rounded-2xl border border-white/5 space-y-3 relative">
+                    {/* Top Row: Name and Delete button */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Node Name</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Mumbai"
+                          value={data.name}
+                          onChange={(e) => handleModalDataChange(index, 'name', e.target.value)}
+                          className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                        />
+                      </div>
+                      <div className="pt-5">
+                        <button 
+                          onClick={() => handleDeleteWarehouse(index)}
+                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                          title="Remove Node"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                    {/* Tier / Type */}
-                    <div className="w-full sm:w-36">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tier / Type</label>
-                      <select 
-                        value={data.type || 'local_dc'}
-                        onChange={(e) => handleModalDataChange(index, 'type', e.target.value)}
-                        className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer"
-                      >
-                        <option value="factory">Factory (T1)</option>
-                        <option value="regional_hub">Regional Hub (T2)</option>
-                        <option value="local_dc">Local DC (T3)</option>
-                      </select>
-                    </div>
-                    {/* Stock */}
-                    <div className="w-full sm:w-24">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Stock</label>
-                      <input 
-                        type="number" 
-                        min="0"
-                        placeholder="100"
-                        value={data.stock}
-                        onChange={(e) => handleModalDataChange(index, 'stock', e.target.value)}
-                        className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
-                      />
-                    </div>
-                    {/* Parent Node */}
-                    <div className="w-full sm:w-36">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Parent Node</label>
-                      <select 
-                        value={data.parent || ''}
-                        disabled={data.type === 'factory' || validParents.length === 0}
-                        onChange={(e) => handleModalDataChange(index, 'parent', e.target.value)}
-                        className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <option value="">None</option>
-                        {validParents.map(parentOpt => (
-                          <option key={parentOpt.name} value={parentOpt.name}>
-                            {parentOpt.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {/* Delete button */}
-                    <div className="pt-2 sm:pt-4 flex justify-end">
-                      <button 
-                        onClick={() => handleDeleteWarehouse(index)}
-                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                        title="Remove Node"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+
+                    {/* Bottom Row: Tier, Stock, Parent */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tier / Type</label>
+                        <select 
+                          value={data.type || 'local_dc'}
+                          onChange={(e) => handleModalDataChange(index, 'type', e.target.value)}
+                          className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer"
+                        >
+                          <option value="factory">Factory (T1)</option>
+                          <option value="regional_hub">Regional Hub (T2)</option>
+                          <option value="local_dc">Local DC (T3)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Stock</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          placeholder="100"
+                          value={data.stock}
+                          onChange={(e) => handleModalDataChange(index, 'stock', e.target.value)}
+                          className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Parent Node</label>
+                        <select 
+                          value={data.parent || ''}
+                          disabled={data.type === 'factory' || validParents.length === 0}
+                          onChange={(e) => handleModalDataChange(index, 'parent', e.target.value)}
+                          className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <option value="">None</option>
+                          {validParents.map(parentOpt => (
+                            <option key={parentOpt.name} value={parentOpt.name}>
+                              {parentOpt.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
                 );
