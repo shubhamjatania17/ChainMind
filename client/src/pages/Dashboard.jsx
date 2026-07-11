@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { database, ref, onValue, set, remove, signOut, auth } from '../firebase';
-import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download, Plus, Trash2, X } from 'lucide-react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -15,6 +15,8 @@ function Dashboard({ user }) {
   // Config Modal State
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [modalData, setModalData] = useState([]);
+  const [hasAutoOpened, setHasAutoOpened] = useState(false);
+  const [configError, setConfigError] = useState('');
 
   // Simulation State
   const [simTargetCity, setSimTargetCity] = useState('');
@@ -25,6 +27,39 @@ function Dashboard({ user }) {
   const [insight, setInsight] = useState('');
   const [loadingInsight, setLoadingInsight] = useState(false);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+
+  // Custom Alert / Confirm Dialog State
+  const [customDialog, setCustomDialog] = useState(null);
+
+  const showCustomAlert = (message) => {
+    return new Promise((resolve) => {
+      setCustomDialog({
+        type: 'alert',
+        message,
+        onConfirm: () => {
+          setCustomDialog(null);
+          resolve(true);
+        }
+      });
+    });
+  };
+
+  const showCustomConfirm = (message) => {
+    return new Promise((resolve) => {
+      setCustomDialog({
+        type: 'confirm',
+        message,
+        onConfirm: () => {
+          setCustomDialog(null);
+          resolve(true);
+        },
+        onCancel: () => {
+          setCustomDialog(null);
+          resolve(false);
+        }
+      });
+    });
+  };
 
   useEffect(() => {
     const inventoryRef = ref(database, `users/${user.uid}/inventory`);
@@ -48,17 +83,19 @@ function Dashboard({ user }) {
   // Auto-open modal if inventory is loaded and empty
   useEffect(() => {
     if (dbLoaded && (!inventory || Object.keys(inventory).length === 0)) {
-      if (!isConfigModalOpen) {
+      if (!isConfigModalOpen && !hasAutoOpened) {
         const timer = setTimeout(() => {
           setModalData([{ name: '', stock: '' }]);
           setIsConfigModalOpen(true);
+          setHasAutoOpened(true);
         }, 0);
         return () => clearTimeout(timer);
       }
     }
-  }, [dbLoaded, inventory, isConfigModalOpen]);
+  }, [dbLoaded, inventory, isConfigModalOpen, hasAutoOpened]);
 
   const openConfigModal = () => {
+    setConfigError('');
     if (inventory && Object.keys(inventory).length > 0) {
       setModalData(Object.entries(inventory).map(([name, stock]) => ({ name, stock })));
     } else {
@@ -68,14 +105,17 @@ function Dashboard({ user }) {
   };
 
   const handleAddWarehouse = () => {
+    if (configError) setConfigError('');
     setModalData([...modalData, { name: '', stock: '' }]);
   };
 
   const handleDeleteWarehouse = (index) => {
+    if (configError) setConfigError('');
     setModalData(modalData.filter((_, i) => i !== index));
   };
 
   const handleModalDataChange = (index, field, value) => {
+    if (configError) setConfigError('');
     const newData = [...modalData];
     newData[index][field] = value;
     setModalData(newData);
@@ -83,11 +123,11 @@ function Dashboard({ user }) {
 
   const handleSaveConfig = async () => {
     if (modalData.length === 0) {
-      alert("Please add at least one warehouse.");
+      setConfigError("Please add at least one warehouse.");
       return;
     }
     if (modalData.some(d => !d.name.trim() || d.stock === '')) {
-      alert("Please fill in all city names and stock amounts.");
+      setConfigError("Please fill in all city names and stock amounts.");
       return;
     }
 
@@ -95,7 +135,7 @@ function Dashboard({ user }) {
     const names = modalData.map(d => d.name.trim().toLowerCase());
     const hasDuplicates = names.some((name, idx) => names.indexOf(name) !== idx);
     if (hasDuplicates) {
-      alert("Each warehouse must have a unique name.");
+      setConfigError("Each warehouse must have a unique name.");
       return;
     }
 
@@ -109,9 +149,11 @@ function Dashboard({ user }) {
   };
 
   const handleResetApp = async () => {
-    if (window.confirm("Are you sure you want to reset the configuration and delete all warehouse data?")) {
+    const confirmed = await showCustomConfirm("Are you sure you want to reset the configuration and delete all warehouse data?");
+    if (confirmed) {
       await remove(ref(database, `users/${user.uid}/inventory`));
       setInsight('');
+      setHasAutoOpened(false);
     }
   };
 
@@ -127,7 +169,7 @@ function Dashboard({ user }) {
       fetchAIInsights(updatedStock, simTargetCity, simSurgePercent);
     } catch (error) {
       console.error('Simulation failed:', error);
-      alert('Simulation failed. Make sure backend is running.');
+      await showCustomAlert('Simulation failed. Make sure backend is running.');
     } finally {
       setSimulating(false);
     }
@@ -161,7 +203,7 @@ function Dashboard({ user }) {
       setDownloadingPDF(false);
     } catch (error) {
       console.error('Failed to generate PDF:', error);
-      alert('Failed to generate PDF mitigation report. Ensure PDFMonkey API key is correct.');
+      await showCustomAlert('Failed to generate PDF mitigation report. Ensure PDFMonkey API key is correct.');
       setDownloadingPDF(false);
     }
   };
@@ -447,6 +489,13 @@ function Dashboard({ user }) {
                   <p className="text-xs text-slate-400 mt-0.5">Add, update, or remove warehouses in your digital twin.</p>
                 </div>
               </div>
+              <button 
+                onClick={() => setIsConfigModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto pr-1 my-4 space-y-4 custom-scrollbar">
@@ -495,15 +544,20 @@ function Dashboard({ user }) {
                 <span>Add Warehouse</span>
               </button>
 
+              {configError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center space-x-2 text-red-400 text-xs font-medium animate-in fade-in duration-150">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{configError}</span>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2 border-t border-white/5">
-                {inventory && Object.keys(inventory).length > 0 && (
-                  <button 
-                    onClick={() => setIsConfigModalOpen(false)}
-                    className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                )}
+                <button 
+                  onClick={() => setIsConfigModalOpen(false)}
+                  className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
+                >
+                  Cancel
+                </button>
                 <button 
                   onClick={handleSaveConfig}
                   className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
@@ -511,6 +565,55 @@ function Dashboard({ user }) {
                   Save Changes
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Dialog Box */}
+      {customDialog && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="relative w-full max-w-md bg-slate-900/95 backdrop-blur-xl border border-white/10 p-6 rounded-3xl shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-150">
+            <div className={`p-3.5 rounded-2xl mb-4 ${customDialog.type === 'confirm' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}>
+              {customDialog.type === 'confirm' ? (
+                <AlertTriangle className="h-7 w-7" />
+              ) : (
+                <BrainCircuit className="h-7 w-7" />
+              )}
+            </div>
+            
+            <h3 className="text-lg font-bold text-white mb-2 font-display">
+              {customDialog.type === 'confirm' ? 'Confirm Action' : 'Notification'}
+            </h3>
+            
+            <p className="text-slate-300 text-sm leading-relaxed mb-6">
+              {customDialog.message}
+            </p>
+
+            <div className="flex gap-3 w-full border-t border-white/5 pt-4">
+              {customDialog.type === 'confirm' ? (
+                <>
+                  <button
+                    onClick={() => customDialog.onCancel?.()}
+                    className="flex-1 py-2.5 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => customDialog.onConfirm()}
+                    className="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/20 transition-all"
+                  >
+                    Confirm
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => customDialog.onConfirm()}
+                  className="w-full py-2.5 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
+                >
+                  OK
+                </button>
+              )}
             </div>
           </div>
         </div>
