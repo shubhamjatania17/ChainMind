@@ -28,6 +28,58 @@ function cleanMarkdown(text) {
   return cleaned.trim();
 }
 
+// Normalization Utility
+function normalizeInventory(inv) {
+  if (!inv) return {};
+  const normalized = {};
+  Object.entries(inv).forEach(([name, val]) => {
+    if (typeof val === 'number') {
+      normalized[name] = {
+        stock: val,
+        type: 'local_dc',
+        parent: ''
+      };
+    } else if (val && typeof val === 'object') {
+      normalized[name] = {
+        stock: typeof val.stock === 'number' ? val.stock : parseInt(val.stock || 0),
+        type: val.type || 'local_dc',
+        parent: val.parent || ''
+      };
+    }
+  });
+  return normalized;
+}
+
+// Hierarchical Upstream Replenishment Propagation
+function propagateReplenishment(inventory, nodeName, logs) {
+  const node = inventory[nodeName];
+  if (!node || !node.parent) return;
+
+  const parentName = node.parent;
+  const parent = inventory[parentName];
+  if (!parent) return;
+
+  // Safety stock: LDC safety = 80, Hub safety = 80, Factory safety = 50.
+  const safetyStock = node.type === 'factory' ? 50 : 80;
+  if (node.stock >= safetyStock) return;
+
+  const deficit = safetyStock - node.stock;
+
+  // Parent safety threshold: parent won't deplete below this to help children
+  const parentSafety = parent.type === 'factory' ? 50 : 80;
+  const available = Math.max(0, parent.stock - parentSafety);
+
+  const transfer = Math.min(deficit, available);
+  if (transfer > 0) {
+    node.stock += transfer;
+    parent.stock -= transfer;
+    logs.push(`Replenished: Transferred ${transfer} units from ${parentName} (${parent.type === 'factory' ? 'Factory' : parent.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'}) to ${nodeName} (${node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'}).`);
+
+    // Recursively propagate upstream replenishment
+    propagateReplenishment(inventory, parentName, logs);
+  }
+}
+
 // Simulate Route
 app.post('/simulate', (req, res) => {
   try {
@@ -36,16 +88,26 @@ app.post('/simulate', (req, res) => {
       return res.status(400).json({ error: 'Inventory, targetCity, and surgePercentage are required' });
     }
 
-    const updatedInventory = { ...inventory };
+    const normalized = normalizeInventory(inventory);
+    const updatedInventory = JSON.parse(JSON.stringify(normalized)); // deep copy
     
+    const logs = [];
     if (updatedInventory[targetCity]) {
-      const currentStock = updatedInventory[targetCity];
+      const node = updatedInventory[targetCity];
+      const currentStock = node.stock;
       const reduction = Math.floor(currentStock * (surgePercentage / 100));
-      updatedInventory[targetCity] = Math.max(0, currentStock - reduction);
+      node.stock = Math.max(0, currentStock - reduction);
+      logs.push(`Surge Impact: Demand surge of ${surgePercentage}% reduced stock at ${targetCity} (${node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'}) by ${reduction} units.`);
+      
+      // Propagate replenishment upstream
+      propagateReplenishment(updatedInventory, targetCity, logs);
+    } else {
+      logs.push(`Error: Target node ${targetCity} not found in inventory.`);
     }
 
-    res.json({ updatedInventory });
+    res.json({ updatedInventory, logs });
   } catch (error) {
+    console.error("Simulation error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -57,6 +119,8 @@ app.post('/ai-insight', async (req, res) => {
     if (!inventory) {
       return res.status(400).json({ error: 'Inventory data is required' });
     }
+
+    const normalized = normalizeInventory(inventory);
 
     if (!genAI) {
       return res.status(503).json({ error: 'Gemini API key not configured on server' });
@@ -70,7 +134,12 @@ app.post('/ai-insight', async (req, res) => {
       eventContext = `A simulated demand surge of ${surgePercentage}% just occurred in ${targetCity}. `;
     }
 
-    const prompt = `Analyze this supply chain inventory scenario. ${eventContext}Identify risks and suggest actions like stock redistribution or restocking.\n\nCurrent Inventory: ${JSON.stringify(inventory)}\nNote: Stock < 80 is considered at Risk.\n\nIMPORTANT: Return ONLY the markdown content. Do NOT wrap your entire response in triple backticks (e.g., \`\`\`markdown ... \`\`\`).`;
+    const prompt = `Analyze this hierarchical multi-tier supply chain network (Factories -> Regional Hubs -> Local Distribution Centers). ${eventContext}Identify cross-tier bottlenecks, transportation risks, and stockout threats at critical LDCs. Recommend specific cross-tier stock allocations, production rate increases at factories, or local redistributions to stabilize the network.
+
+Current Network State: ${JSON.stringify(normalized)}
+Note: Stock < 80 is considered critical/at risk for Hubs and LDCs. Factories are primary production centers.
+
+IMPORTANT: Return ONLY the markdown content. Do NOT wrap your entire response in triple backticks (e.g., \`\`\`markdown ... \`\`\`).`;
     
     let result;
     let retries = 3;
@@ -83,7 +152,6 @@ app.post('/ai-insight', async (req, res) => {
         apiSuccess = true;
         break; // Success! Break out of the retry loop
       } catch (err) {
-        // If it's a 503 High Demand or 429 Quota error, retry
         if (err.message.includes('503') || err.message.includes('high demand') || err.status === 503 || err.status === 429) {
           retries--;
           if (retries === 0) {
@@ -107,11 +175,16 @@ app.post('/ai-insight', async (req, res) => {
     } 
     
     // Fallback: Generate a Mock Response
-    let criticalCities = [];
-    let stableCities = [];
-    for (const [city, stock] of Object.entries(inventory)) {
-        if (stock < 80) criticalCities.push(city);
-        else stableCities.push(city);
+    let criticalNodes = [];
+    let stableNodes = [];
+    
+    for (const [name, node] of Object.entries(normalized)) {
+      const threshold = node.type === 'factory' ? 100 : 80;
+      if (node.stock < threshold) {
+        criticalNodes.push({ name, ...node });
+      } else {
+        stableNodes.push({ name, ...node });
+      }
     }
     
     let mockText = `**[Mock Intelligence - Live API Unavailable]**\n\n`;
@@ -119,15 +192,33 @@ app.post('/ai-insight', async (req, res) => {
         mockText += `* **Event Detected**: A simulated demand surge of **${surgePercentage}%** just impacted **${targetCity}**.\n`;
     }
     
-    if (criticalCities.length > 0) {
-        mockText += `* **Critical Nodes**: **${criticalCities.join(', ')}** dropped below the safe threshold of 80 units.\n`;
-        if (stableCities.length > 0) {
-            mockText += `* **Recommendation**: Reroute excess inventory from **${stableCities[0]}** to stabilize the network immediately.\n`;
-        } else {
-            mockText += `* **Recommendation**: **Emergency Restocking Required!** No stable warehouses available for local rerouting.\n`;
-        }
+    if (criticalNodes.length > 0) {
+        mockText += `### Critical Bottlenecks Found:\n`;
+        criticalNodes.forEach(node => {
+          mockText += `* **${node.name}** (${node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'}): Currently at **${node.stock}** units (below safety limits).\n`;
+          if (node.parent && normalized[node.parent]) {
+            const parent = normalized[node.parent];
+            mockText += `  * *Upstream Connection*: Linked to **${node.parent}** (${parent.stock} units available).\n`;
+          }
+        });
+        
+        mockText += `\n### Recommendations:\n`;
+        criticalNodes.forEach(node => {
+          if (node.parent && normalized[node.parent] && normalized[node.parent].stock > 100) {
+            mockText += `1. **Replenish ${node.name}**: Increase transfer capacity from its upstream parent **${node.parent}** which holds a healthy surplus of ${normalized[node.parent].stock} units.\n`;
+          } else if (node.type === 'local_dc') {
+            const localAlternatives = stableNodes.filter(n => n.type === 'local_dc' && n.stock > 100);
+            if (localAlternatives.length > 0) {
+              mockText += `1. **Reroute Local Stocks**: Shift inventory laterally from **${localAlternatives[0].name}** to **${node.name}** to prevent local stockout.\n`;
+            } else {
+              mockText += `1. **Production Boost**: Factory production must be accelerated. End distribution node **${node.name}** is depleted and upstream nodes have no surplus.\n`;
+            }
+          } else {
+            mockText += `1. **Expedite Supplier Delivery**: Trigger emergency supply runs to replenish **${node.name}** directly.\n`;
+          }
+        });
     } else {
-        mockText += `* **Status**: Network is stable. All nodes are operating securely above critical thresholds.\n`;
+        mockText += `* **Status**: Network is stable. All hierarchical tiers (Factories, Hubs, LDCs) are operating securely above safety thresholds.\n`;
     }
 
     res.json({ insight: mockText });

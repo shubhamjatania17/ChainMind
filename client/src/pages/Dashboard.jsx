@@ -21,6 +21,7 @@ function Dashboard({ user }) {
   const [simTargetCity, setSimTargetCity] = useState('');
   const [simSurgePercent, setSimSurgePercent] = useState(30);
   const [simulating, setSimulating] = useState(false);
+  const [simLogs, setSimLogs] = useState([]);
   
   // AI Insights State
   const [insight, setInsight] = useState('');
@@ -60,15 +61,37 @@ function Dashboard({ user }) {
     });
   };
 
+  const normalizeInventory = (inv) => {
+    if (!inv) return {};
+    const normalized = {};
+    Object.entries(inv).forEach(([name, val]) => {
+      if (typeof val === 'number') {
+        normalized[name] = {
+          stock: val,
+          type: 'local_dc',
+          parent: ''
+        };
+      } else if (val && typeof val === 'object') {
+        normalized[name] = {
+          stock: typeof val.stock === 'number' ? val.stock : parseInt(val.stock || 0),
+          type: val.type || 'local_dc',
+          parent: val.parent || ''
+        };
+      }
+    });
+    return normalized;
+  };
+
   useEffect(() => {
     const inventoryRef = ref(database, `users/${user.uid}/inventory`);
     const unsubscribe = onValue(inventoryRef, (snapshot) => {
       const data = snapshot.val();
-      setInventory(data); // Will be null if empty
+      const normalized = normalizeInventory(data);
+      setInventory(normalized); // Will be empty object if null
       
-      if (data && Object.keys(data).length > 0) {
-        if (!simTargetCity || !Object.keys(data).includes(simTargetCity)) {
-          setSimTargetCity(Object.keys(data)[0]);
+      if (normalized && Object.keys(normalized).length > 0) {
+        if (!simTargetCity || !Object.keys(normalized).includes(simTargetCity)) {
+          setSimTargetCity(Object.keys(normalized)[0]);
         }
       } else {
         setSimTargetCity('');
@@ -84,16 +107,23 @@ function Dashboard({ user }) {
   const openConfigModal = () => {
     setConfigError('');
     if (inventory && Object.keys(inventory).length > 0) {
-      setModalData(Object.entries(inventory).map(([name, stock]) => ({ name, stock })));
+      setModalData(
+        Object.entries(inventory).map(([name, node]) => ({
+          name,
+          stock: node.stock,
+          type: node.type || 'local_dc',
+          parent: node.parent || ''
+        }))
+      );
     } else {
-      setModalData([{ name: '', stock: '' }]);
+      setModalData([{ name: '', stock: '', type: 'local_dc', parent: '' }]);
     }
     setIsConfigModalOpen(true);
   };
 
   const handleAddWarehouse = () => {
     if (configError) setConfigError('');
-    setModalData([...modalData, { name: '', stock: '' }]);
+    setModalData([...modalData, { name: '', stock: '', type: 'local_dc', parent: '' }]);
   };
 
   const handleDeleteWarehouse = (index) => {
@@ -104,8 +134,45 @@ function Dashboard({ user }) {
   const handleModalDataChange = (index, field, value) => {
     if (configError) setConfigError('');
     const newData = [...modalData];
-    newData[index][field] = value;
+    
+    if (field === 'name') {
+      const oldName = newData[index].name;
+      newData[index].name = value;
+      if (oldName) {
+        newData.forEach(row => {
+          if (row.parent === oldName) {
+            row.parent = value;
+          }
+        });
+      }
+    } else if (field === 'type') {
+      newData[index].type = value;
+      if (value === 'factory') {
+        newData[index].parent = '';
+      }
+    } else {
+      newData[index][field] = value;
+    }
+    
     setModalData(newData);
+  };
+
+  const getValidParents = (index) => {
+    const currentRow = modalData[index];
+    if (!currentRow || currentRow.type === 'factory') return [];
+    
+    return modalData.filter((row, idx) => {
+      if (idx === index) return false;
+      if (!row.name.trim()) return false;
+      
+      if (currentRow.type === 'regional_hub') {
+        return row.type === 'factory';
+      }
+      if (currentRow.type === 'local_dc') {
+        return row.type === 'factory' || row.type === 'regional_hub';
+      }
+      return false;
+    });
   };
 
   const handleSaveConfig = async () => {
@@ -126,9 +193,21 @@ function Dashboard({ user }) {
       return;
     }
 
+    // Sanitize parents
+    const nodeNames = modalData.map(d => d.name.trim());
+    modalData.forEach(row => {
+      if (row.parent && !nodeNames.includes(row.parent)) {
+        row.parent = '';
+      }
+    });
+
     const newInventory = {};
     modalData.forEach(d => {
-      newInventory[d.name.trim()] = parseInt(d.stock);
+      newInventory[d.name.trim()] = {
+        stock: parseInt(d.stock),
+        type: d.type || 'local_dc',
+        parent: d.parent || ''
+      };
     });
 
     await set(ref(database, `users/${user.uid}/inventory`), newInventory);
@@ -140,6 +219,7 @@ function Dashboard({ user }) {
     if (confirmed) {
       await remove(ref(database, `users/${user.uid}/inventory`));
       setInsight('');
+      setSimLogs([]);
     }
   };
 
@@ -147,10 +227,14 @@ function Dashboard({ user }) {
     if (!inventory || !simTargetCity) return;
     setSimulating(true);
     setInsight('');
+    setSimLogs([]);
     try {
       const payload = { inventory, targetCity: simTargetCity, surgePercentage: parseInt(simSurgePercent) };
       const response = await axios.post(`${API_URL}/simulate`, payload);
       const updatedStock = response.data.updatedInventory;
+      const logs = response.data.logs || [];
+      
+      setSimLogs(logs);
       await set(ref(database, `users/${user.uid}/inventory`), updatedStock);
       fetchAIInsights(updatedStock, simTargetCity, simSurgePercent);
     } catch (error) {
@@ -281,8 +365,10 @@ function Dashboard({ user }) {
                 className="block w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm appearance-none cursor-pointer hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em`, paddingRight: `2.5rem` }}
               >
-                {Object.keys(inventory || {}).map(city => (
-                  <option key={city} value={city} className="bg-slate-800 text-white">{city}</option>
+                {Object.entries(inventory || {}).map(([name, node]) => (
+                  <option key={name} value={name} className="bg-slate-800 text-white">
+                    {name} ({node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'})
+                  </option>
                 ))}
               </select>
             </div>
@@ -313,56 +399,178 @@ function Dashboard({ user }) {
           </div>
         </div>
 
+        {/* Simulation Propagation Timeline Logs */}
+        {simLogs && simLogs.length > 0 && (
+          <div className="bg-slate-900/40 backdrop-blur-md p-6 rounded-3xl shadow-xl border border-white/10 relative overflow-hidden animate-in fade-in duration-200">
+            <div className="mb-4">
+              <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-2">
+                <Activity className="h-4 w-4 text-emerald-400" />
+                <span>Simulation Propagation Logs</span>
+              </h3>
+            </div>
+            <div className="relative border-l border-white/10 pl-6 ml-3 space-y-4">
+              {simLogs.map((log, idx) => (
+                <div key={idx} className="relative">
+                  <div className="absolute left-[-31px] top-1.5 h-2 w-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50"></div>
+                  <p className="text-slate-300 text-sm leading-relaxed">{log}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Warehouse Network Cards */}
         <div>
-          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 ml-2">Global Network Status</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {!inventory || Object.keys(inventory).length === 0 ? (
-              <div className="col-span-full bg-slate-900/40 backdrop-blur-md rounded-3xl p-8 border border-dashed border-white/10 text-center py-12 flex flex-col items-center">
-                <PackageOpen className="h-12 w-12 text-slate-500 mb-3" />
-                <h4 className="text-lg font-bold text-white mb-1">No Warehouses Configured</h4>
-                <p className="text-slate-400 text-sm max-w-md mb-6">
-                  Set up your physical warehouse locations to begin simulation and generate insights.
-                </p>
-                <button
-                  onClick={openConfigModal}
-                  className="px-5 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center space-x-2 animate-pulse hover:animate-none"
-                >
-                  <Settings className="h-4 w-4" />
-                  <span>Configure Network</span>
-                </button>
-              </div>
-            ) : (
-              Object.entries(inventory).map(([warehouse, stock]) => {
-                const isRisk = stock < 80;
-                return (
-                  <div key={warehouse} className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 ${warehouse === simTargetCity ? 'border-blue-500/50 shadow-blue-500/10' : 'border-white/5 hover:border-white/20'}`}>
-                    
-                    {/* Danger Glow Effect */}
-                    {isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none"></div>}
-                    {warehouse === simTargetCity && !isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>}
-
-                    <div className="flex justify-between items-start relative z-10">
-                      <div className="overflow-hidden pr-2">
-                        <h3 className="text-xl font-bold text-white font-display truncate" title={warehouse}>{warehouse}</h3>
-                        <p className="text-slate-500 text-xs mt-1 uppercase tracking-wider font-semibold">Active Node</p>
-                      </div>
-                      <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm ${isRisk ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
-                        {isRisk ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
-                        <span>{isRisk ? 'Critical' : 'Stable'}</span>
-                      </div>
-                    </div>
-                    <div className="mt-8 flex items-baseline space-x-2 relative z-10">
-                      <span className={`text-5xl font-extrabold tracking-tight font-display ${isRisk ? 'text-red-400' : 'text-white'}`}>
-                        {stock}
-                      </span>
-                      <span className="text-slate-500 text-sm font-medium">units</span>
-                    </div>
+          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 ml-2">Global Network Status</h3>
+          {!inventory || Object.keys(inventory).length === 0 ? (
+            <div className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-8 border border-dashed border-white/10 text-center py-12 flex flex-col items-center">
+              <PackageOpen className="h-12 w-12 text-slate-500 mb-3" />
+              <h4 className="text-lg font-bold text-white mb-1">No Warehouses Configured</h4>
+              <p className="text-slate-400 text-sm max-w-md mb-6">
+                Set up your physical warehouse locations to begin simulation and generate insights.
+              </p>
+              <button
+                onClick={openConfigModal}
+                className="px-5 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center space-x-2 animate-pulse hover:animate-none"
+              >
+                <Settings className="h-4 w-4" />
+                <span>Configure Network</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-10">
+              {/* Factories Tier */}
+              {Object.entries(inventory).filter(entry => entry[1].type === 'factory').length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-blue-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-blue-400"></div>
+                    <span>Tier 1: Production Factories</span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {Object.entries(inventory)
+                      .filter(entry => entry[1].type === 'factory')
+                      .map(([name, node]) => (
+                        <div key={name} className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 ${name === simTargetCity ? 'border-blue-500/50 shadow-blue-500/10' : 'border-white/5 hover:border-white/20'}`}>
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                          <div className="flex justify-between items-start relative z-10">
+                            <div className="overflow-hidden pr-2">
+                              <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{name}</h3>
+                              <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
+                                Independent Source Node
+                              </p>
+                            </div>
+                            <div className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                              <CheckCircle className="h-3 w-3" />
+                              <span>Stable</span>
+                            </div>
+                          </div>
+                          <div className="mt-8 flex items-baseline space-x-2 relative z-10">
+                            <span className="text-5xl font-extrabold tracking-tight font-display text-white">
+                              {node.stock}
+                            </span>
+                            <span className="text-slate-500 text-sm font-medium">units</span>
+                          </div>
+                        </div>
+                      ))}
                   </div>
-                );
-              })
-            )}
-          </div>
+                </div>
+              )}
+
+              {/* Regional Hubs Tier */}
+              {Object.entries(inventory).filter(entry => entry[1].type === 'regional_hub').length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-indigo-400"></div>
+                    <span>Tier 2: Regional Hubs</span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {Object.entries(inventory)
+                      .filter(entry => entry[1].type === 'regional_hub')
+                      .map(([name, node]) => {
+                        const isRisk = node.stock < 80;
+                        return (
+                          <div key={name} className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 ${name === simTargetCity ? 'border-blue-500/50 shadow-blue-500/10' : 'border-white/5 hover:border-white/20'}`}>
+                            {isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none"></div>}
+                            {name === simTargetCity && !isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>}
+                            <div className="flex justify-between items-start relative z-10">
+                              <div className="overflow-hidden pr-2">
+                                <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{name}</h3>
+                                {node.parent ? (
+                                  <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold truncate" title={`Supplied by: ${node.parent}`}>
+                                    Supplied by: <span className="text-indigo-400 font-bold">{node.parent}</span>
+                                  </p>
+                                ) : (
+                                  <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
+                                    Independent Hub Node
+                                  </p>
+                                )}
+                              </div>
+                              <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm ${isRisk ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                                {isRisk ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
+                                <span>{isRisk ? 'Critical' : 'Stable'}</span>
+                              </div>
+                            </div>
+                            <div className="mt-8 flex items-baseline space-x-2 relative z-10">
+                              <span className={`text-5xl font-extrabold tracking-tight font-display ${isRisk ? 'text-red-400' : 'text-white'}`}>
+                                {node.stock}
+                              </span>
+                              <span className="text-slate-500 text-sm font-medium">units</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* Local Distribution Centers Tier */}
+              {Object.entries(inventory).filter(entry => entry[1].type === 'local_dc' || (!entry[1].type)).length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-purple-400"></div>
+                    <span>Tier 3: Local Distribution Centers</span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {Object.entries(inventory)
+                      .filter(entry => entry[1].type === 'local_dc' || (!entry[1].type))
+                      .map(([name, node]) => {
+                        const isRisk = node.stock < 80;
+                        return (
+                          <div key={name} className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 ${name === simTargetCity ? 'border-blue-500/50 shadow-blue-500/10' : 'border-white/5 hover:border-white/20'}`}>
+                            {isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none"></div>}
+                            {name === simTargetCity && !isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>}
+                            <div className="flex justify-between items-start relative z-10">
+                              <div className="overflow-hidden pr-2">
+                                <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{name}</h3>
+                                {node.parent ? (
+                                  <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold truncate" title={`Supplied by: ${node.parent}`}>
+                                    Supplied by: <span className="text-purple-400 font-bold">{node.parent}</span>
+                                  </p>
+                                ) : (
+                                  <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
+                                    Independent DC Node
+                                  </p>
+                                )}
+                              </div>
+                              <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm ${isRisk ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                                {isRisk ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
+                                <span>{isRisk ? 'Critical' : 'Stable'}</span>
+                              </div>
+                            </div>
+                            <div className="mt-8 flex items-baseline space-x-2 relative z-10">
+                              <span className={`text-5xl font-extrabold tracking-tight font-display ${isRisk ? 'text-red-400' : 'text-white'}`}>
+                                {node.stock}
+                              </span>
+                              <span className="text-slate-500 text-sm font-medium">units</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* AI Insight Panel */}
@@ -485,40 +693,76 @@ function Dashboard({ user }) {
             </div>
 
             <div className="flex-1 overflow-y-auto pr-1 my-4 space-y-4 custom-scrollbar">
-              {modalData.map((data, index) => (
-                <div key={index} className="flex items-center gap-3 p-3 bg-black/20 rounded-2xl border border-white/5">
-                  <div className="flex-1 min-w-0">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">City Name</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Mumbai"
-                      value={data.name}
-                      onChange={(e) => handleModalDataChange(index, 'name', e.target.value)}
-                      className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
-                    />
+              {modalData.map((data, index) => {
+                const validParents = getValidParents(index);
+                return (
+                  <div key={index} className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-black/20 rounded-2xl border border-white/5">
+                    {/* Node Name */}
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Node Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Mumbai"
+                        value={data.name}
+                        onChange={(e) => handleModalDataChange(index, 'name', e.target.value)}
+                        className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                      />
+                    </div>
+                    {/* Tier / Type */}
+                    <div className="w-full sm:w-36">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tier / Type</label>
+                      <select 
+                        value={data.type || 'local_dc'}
+                        onChange={(e) => handleModalDataChange(index, 'type', e.target.value)}
+                        className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer"
+                      >
+                        <option value="factory">Factory (T1)</option>
+                        <option value="regional_hub">Regional Hub (T2)</option>
+                        <option value="local_dc">Local DC (T3)</option>
+                      </select>
+                    </div>
+                    {/* Stock */}
+                    <div className="w-full sm:w-24">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Stock</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        placeholder="100"
+                        value={data.stock}
+                        onChange={(e) => handleModalDataChange(index, 'stock', e.target.value)}
+                        className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                      />
+                    </div>
+                    {/* Parent Node */}
+                    <div className="w-full sm:w-36">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Parent Node</label>
+                      <select 
+                        value={data.parent || ''}
+                        disabled={data.type === 'factory' || validParents.length === 0}
+                        onChange={(e) => handleModalDataChange(index, 'parent', e.target.value)}
+                        className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <option value="">None</option>
+                        {validParents.map(parentOpt => (
+                          <option key={parentOpt.name} value={parentOpt.name}>
+                            {parentOpt.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Delete button */}
+                    <div className="pt-2 sm:pt-4 flex justify-end">
+                      <button 
+                        onClick={() => handleDeleteWarehouse(index)}
+                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                        title="Remove Node"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="w-28">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Initial Stock</label>
-                    <input 
-                      type="number" 
-                      min="0"
-                      placeholder="e.g. 100"
-                      value={data.stock}
-                      onChange={(e) => handleModalDataChange(index, 'stock', e.target.value)}
-                      className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
-                    />
-                  </div>
-                  <div className="pt-5">
-                    <button 
-                      onClick={() => handleDeleteWarehouse(index)}
-                      className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                      title="Remove Warehouse"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="pt-2 flex flex-col gap-4">
