@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { database, ref, onValue, set, remove, signOut, auth } from '../firebase';
-import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download, Plus, Trash2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -439,10 +439,6 @@ function Dashboard({ user }) {
             <h1 className="text-xl sm:text-2xl font-bold text-white font-display tracking-tight">ChainMind</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-              <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></div>
-              <span className="text-xs font-medium text-slate-300">{user?.email}</span>
-            </div>
             <button 
               onClick={openConfigModal}
               className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all text-sm font-medium group"
@@ -505,15 +501,41 @@ function Dashboard({ user }) {
             
             <div className="w-full md:w-1/3">
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Demand Surge (%)</label>
-              <input 
-                type="number" 
-                min="1" 
-                max="100"
-                value={simSurgePercent}
-                onChange={(e) => setSimSurgePercent(e.target.value)}
-                disabled={!inventory || Object.keys(inventory).length === 0}
-                className="block w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              />
+              <div className="relative flex items-center">
+                <input 
+                  type="number" 
+                  min="1" 
+                  max="100"
+                  value={simSurgePercent}
+                  onChange={(e) => setSimSurgePercent(e.target.value)}
+                  disabled={!inventory || Object.keys(inventory).length === 0}
+                  className="block w-full pl-4 pr-10 py-3 bg-white/5 border border-white/10 rounded-xl shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <div className="absolute right-3 flex flex-col gap-0.5 z-10">
+                  <button 
+                    type="button"
+                    disabled={!inventory || Object.keys(inventory).length === 0}
+                    onClick={() => {
+                      const currentVal = parseInt(simSurgePercent) || 0;
+                      setSimSurgePercent(String(Math.min(100, currentVal + 1)));
+                    }}
+                    className="p-0.5 text-slate-400 hover:text-blue-400 hover:bg-white/10 rounded transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button 
+                    type="button"
+                    disabled={!inventory || Object.keys(inventory).length === 0}
+                    onClick={() => {
+                      const currentVal = parseInt(simSurgePercent) || 0;
+                      setSimSurgePercent(String(Math.max(1, currentVal - 1)));
+                    }}
+                    className="p-0.5 text-slate-400 hover:text-blue-400 hover:bg-white/10 rounded transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="w-full md:w-1/3">
@@ -917,14 +939,38 @@ function Dashboard({ user }) {
                                   {/* Stock */}
                                   <div>
                                     <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Initial Stock</label>
-                                    <input 
-                                      type="number" 
-                                      min="0"
-                                      value={node.stock}
-                                      onChange={(e) => handleNodeChange(node.id, 'stock', e.target.value)}
-                                      className="block w-full px-2 py-1.5 border border-white/10 rounded-lg bg-white/5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                      placeholder="100"
-                                    />
+                                    <div className="relative flex items-center">
+                                      <input 
+                                        type="number" 
+                                        min="0"
+                                        value={node.stock}
+                                        onChange={(e) => handleNodeChange(node.id, 'stock', e.target.value)}
+                                        className="block w-full pl-2 pr-8 py-1.5 border border-white/10 rounded-lg bg-white/5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        placeholder="100"
+                                      />
+                                      <div className="absolute right-1.5 flex flex-col gap-0.2 z-10">
+                                        <button 
+                                          type="button"
+                                          onClick={() => {
+                                            const currentVal = parseInt(node.stock) || 0;
+                                            handleNodeChange(node.id, 'stock', String(currentVal + 1));
+                                          }}
+                                          className="p-0.5 text-slate-400 hover:text-blue-400 hover:bg-white/10 rounded transition-all cursor-pointer"
+                                        >
+                                          <ChevronUp className="h-3 w-3" />
+                                        </button>
+                                        <button 
+                                          type="button"
+                                          onClick={() => {
+                                            const currentVal = parseInt(node.stock) || 0;
+                                            handleNodeChange(node.id, 'stock', String(Math.max(0, currentVal - 1)));
+                                          }}
+                                          className="p-0.5 text-slate-400 hover:text-blue-400 hover:bg-white/10 rounded transition-all cursor-pointer"
+                                        >
+                                          <ChevronDown className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    </div>
                                   </div>
                                   {/* Parent */}
                                   <div>
