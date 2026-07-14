@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { database, ref, onValue, set, remove, signOut, auth } from '../firebase';
-import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download, Plus, Trash2, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download, Plus, Trash2, X, ChevronUp, ChevronDown, Sliders, User } from 'lucide-react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -444,16 +444,24 @@ function Dashboard({ user }) {
               className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all text-sm font-medium group"
               title="Configure Storage Locations"
             >
-              <Settings className="h-4 w-4 group-hover:rotate-45 transition-transform duration-300" />
-              <span className="hidden sm:inline">Configure Storage Locations</span>
+              <Sliders className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" />
+              <span className="hidden sm:inline">Configure Locations</span>
             </button>
+            <Link 
+              to="/settings"
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 transition-all text-sm font-medium group"
+              title="Account Settings"
+            >
+              <User className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" />
+              <span className="hidden sm:inline">Account Settings</span>
+            </Link>
             <button 
               onClick={handleResetApp}
               className="flex items-center space-x-1 px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all text-sm font-medium group"
               title="Reset Locations"
             >
               <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
-              <span className="hidden sm:inline">Reset Locations</span>
+              <span className="hidden sm:inline">Reset</span>
             </button>
             <button 
               onClick={handleLogout}

@@ -3,8 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { auth, onAuthStateChanged } from './firebase';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-
 import Home from './pages/Home';
+import Settings from './pages/Settings';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -32,6 +32,7 @@ function App() {
         <Route path="/" element={!user ? <Home /> : <Navigate to="/dashboard" />} />
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
         <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
+        <Route path="/settings" element={user ? <Settings user={user} /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
@@ -39,3 +40,5 @@ function App() {
 }
 
 export default App;
+
+
