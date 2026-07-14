@@ -32,44 +32,20 @@ function cleanMarkdown(text) {
 function normalizeInventory(inv) {
   if (!inv) return {};
   const normalized = {};
-  Object.entries(inv).forEach(([key, val]) => {
-    let stock = 0;
-    let type = 'local_dc';
-    let parent = '';
-    let city = '';
-    let displayName = '';
-
+  Object.entries(inv).forEach(([name, val]) => {
     if (typeof val === 'number') {
-      stock = val;
+      normalized[name] = {
+        stock: val,
+        type: 'local_dc',
+        parent: ''
+      };
     } else if (val && typeof val === 'object') {
-      stock = typeof val.stock === 'number' ? val.stock : parseInt(val.stock || 0);
-      type = val.type || 'local_dc';
-      parent = val.parent || '';
-      city = val.city || '';
-      displayName = val.displayName || '';
+      normalized[name] = {
+        stock: typeof val.stock === 'number' ? val.stock : parseInt(val.stock || 0),
+        type: val.type || 'local_dc',
+        parent: val.parent || ''
+      };
     }
-
-    if (!city) {
-      if (key.includes(' - ')) {
-        const parts = key.split(' - ');
-        city = parts[0].trim();
-        displayName = parts.slice(1).join(' - ').trim();
-      } else {
-        city = key;
-        displayName = type === 'factory' ? 'Factory' : type === 'regional_hub' ? 'Regional Hub' : 'Local DC';
-      }
-    }
-    if (!displayName) {
-      displayName = type === 'factory' ? 'Factory' : type === 'regional_hub' ? 'Regional Hub' : 'Local DC';
-    }
-
-    normalized[key] = {
-      stock,
-      type,
-      parent,
-      city,
-      displayName
-    };
   });
   return normalized;
 }

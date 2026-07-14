@@ -14,8 +14,7 @@ function Dashboard({ user }) {
   
   // Config Modal State
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [configCities, setConfigCities] = useState([]);
-  const [configNodes, setConfigNodes] = useState([]);
+  const [modalData, setModalData] = useState([]);
   const [configError, setConfigError] = useState('');
   const [configStep, setConfigStep] = useState(1);
 
@@ -66,45 +65,20 @@ function Dashboard({ user }) {
   const normalizeInventory = (inv) => {
     if (!inv) return {};
     const normalized = {};
-    Object.entries(inv).forEach(([key, val]) => {
-      let stock = 0;
-      let type = 'local_dc';
-      let parent = '';
-      let city = '';
-      let displayName = '';
-
+    Object.entries(inv).forEach(([name, val]) => {
       if (typeof val === 'number') {
-        stock = val;
+        normalized[name] = {
+          stock: val,
+          type: 'local_dc',
+          parent: ''
+        };
       } else if (val && typeof val === 'object') {
-        stock = typeof val.stock === 'number' ? val.stock : parseInt(val.stock || 0);
-        type = val.type || 'local_dc';
-        parent = val.parent || '';
-        city = val.city || '';
-        displayName = val.displayName || '';
+        normalized[name] = {
+          stock: typeof val.stock === 'number' ? val.stock : parseInt(val.stock || 0),
+          type: val.type || 'local_dc',
+          parent: val.parent || ''
+        };
       }
-
-      // If city or displayName are missing (e.g. legacy data), extract them from key
-      if (!city) {
-        if (key.includes(' - ')) {
-          const parts = key.split(' - ');
-          city = parts[0].trim();
-          displayName = parts.slice(1).join(' - ').trim();
-        } else {
-          city = key;
-          displayName = type === 'factory' ? 'Factory' : type === 'regional_hub' ? 'Regional Hub' : 'Local DC';
-        }
-      }
-      if (!displayName) {
-        displayName = type === 'factory' ? 'Factory' : type === 'regional_hub' ? 'Regional Hub' : 'Local DC';
-      }
-
-      normalized[key] = {
-        stock,
-        type,
-        parent,
-        city,
-        displayName
-      };
     });
     return normalized;
   };
@@ -129,159 +103,95 @@ function Dashboard({ user }) {
     return () => unsubscribe();
   }, [simTargetCity, user.uid]);
 
+
+
   const openConfigModal = () => {
     setConfigError('');
     setConfigStep(1); // Start on Page 1
     if (inventory && Object.keys(inventory).length > 0) {
-      // Extract unique cities
-      const uniqueCities = Array.from(new Set(Object.values(inventory).map(node => node.city)));
-      setConfigCities(uniqueCities);
-      
-      // Extract nodes
-      const extractedNodes = Object.entries(inventory).map(([key, node]) => ({
-        id: key,
-        city: node.city,
-        name: node.displayName || (node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'),
-        type: node.type || 'local_dc',
-        stock: String(node.stock),
-        parent: node.parent || ''
-      }));
-      setConfigNodes(extractedNodes);
+      setModalData(
+        Object.entries(inventory).map(([name, node]) => ({
+          name,
+          stock: node.stock,
+          type: node.type || 'local_dc',
+          parent: node.parent || ''
+        }))
+      );
     } else {
-      setConfigCities(['Mumbai']);
-      setConfigNodes([{
-        id: 'node-1',
-        city: 'Mumbai',
-        name: 'Local DC',
-        type: 'local_dc',
-        stock: '100',
-        parent: ''
-      }]);
+      setModalData([{ name: '', stock: '100', type: 'local_dc', parent: '' }]);
     }
     setIsConfigModalOpen(true);
   };
 
-  const handleAddCity = () => {
+  const handleAddWarehouse = () => {
     if (configError) setConfigError('');
-    let newCityName = 'New City';
-    let counter = 1;
-    while (configCities.includes(newCityName)) {
-      newCityName = `New City ${counter}`;
-      counter++;
+    setModalData([...modalData, { name: '', stock: '100', type: 'local_dc', parent: '' }]);
+  };
+
+  const handleDeleteWarehouse = (index) => {
+    if (configError) setConfigError('');
+    setModalData(modalData.filter((_, i) => i !== index));
+  };
+
+  const handleModalDataChange = (index, field, value) => {
+    if (configError) setConfigError('');
+    const newData = [...modalData];
+    
+    if (field === 'name') {
+      const oldName = newData[index].name;
+      newData[index].name = value;
+      if (oldName) {
+        newData.forEach(row => {
+          if (row.parent === oldName) {
+            row.parent = value;
+          }
+        });
+      }
+    } else if (field === 'type') {
+      newData[index].type = value;
+      if (value === 'factory') {
+        newData[index].parent = '';
+      }
+    } else {
+      newData[index][field] = value;
     }
-    setConfigCities([...configCities, newCityName]);
+    
+    setModalData(newData);
   };
 
-  const handleDeleteCity = (indexToDelete) => {
-    if (configError) setConfigError('');
-    const cityToDelete = configCities[indexToDelete];
-    setConfigCities(configCities.filter((_, i) => i !== indexToDelete));
-    // Remove nodes associated with the deleted city
-    setConfigNodes(configNodes.filter(node => node.city !== cityToDelete));
-  };
-
-  const handleCityNameChange = (index, newName) => {
-    if (configError) setConfigError('');
-    const oldName = configCities[index];
-    const updatedCities = [...configCities];
-    updatedCities[index] = newName;
-    setConfigCities(updatedCities);
-
-    // Update city on all associated nodes
-    setConfigNodes(configNodes.map(node => {
-      if (node.city === oldName) {
-        return { ...node, city: newName };
+  const getValidParents = (index) => {
+    const currentRow = modalData[index];
+    if (!currentRow || currentRow.type === 'factory') return [];
+    
+    return modalData.filter((row, idx) => {
+      if (idx === index) return false;
+      if (!row.name.trim()) return false;
+      
+      if (currentRow.type === 'regional_hub') {
+        return row.type === 'factory';
       }
-      return node;
-    }));
-  };
-
-  const handleAddNode = (city) => {
-    if (configError) setConfigError('');
-    const newId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const defaultType = 'local_dc';
-    const typeLabel = defaultType === 'factory' ? 'Factory' : defaultType === 'regional_hub' ? 'Regional Hub' : 'Local DC';
-    const countOfType = configNodes.filter(n => n.city === city && n.type === defaultType).length;
-    const name = `${typeLabel} ${countOfType + 1}`;
-
-    const newNode = {
-      id: newId,
-      city,
-      name,
-      type: defaultType,
-      stock: '100',
-      parent: ''
-    };
-    setConfigNodes([...configNodes, newNode]);
-  };
-
-  const handleDeleteNode = (nodeId) => {
-    if (configError) setConfigError('');
-    setConfigNodes(configNodes.filter(n => n.id !== nodeId).map(n => {
-      if (n.parent === nodeId) {
-        return { ...n, parent: '' };
-      }
-      return n;
-    }));
-  };
-
-  const handleNodeChange = (nodeId, field, value) => {
-    if (configError) setConfigError('');
-    setConfigNodes(configNodes.map(n => {
-      if (n.id === nodeId) {
-        const updated = { ...n, [field]: value };
-        if (field === 'type' && value === 'factory') {
-          updated.parent = '';
-        }
-        if (field === 'type') {
-          const typeLabel = value === 'factory' ? 'Factory' : value === 'regional_hub' ? 'Regional Hub' : 'Local DC';
-          const countOfType = configNodes.filter(x => x.city === n.city && x.type === value).length;
-          updated.name = `${typeLabel} ${countOfType + 1}`;
-        }
-        return updated;
-      }
-      return n;
-    }));
-  };
-
-  const getValidParents = (currentNodeId) => {
-    const current = configNodes.find(n => n.id === currentNodeId);
-    if (!current || current.type === 'factory') return [];
-
-    const isAncestor = (ancestorId, descendantId) => {
-      let curr = configNodes.find(n => n.id === descendantId);
-      let visited = new Set();
-      while (curr && curr.parent) {
-        if (visited.has(curr.id)) break;
-        visited.add(curr.id);
-        if (curr.parent === ancestorId) return true;
-        curr = configNodes.find(n => n.id === curr.parent);
+      if (currentRow.type === 'local_dc') {
+        return row.type === 'factory' || row.type === 'regional_hub';
       }
       return false;
-    };
-
-    return configNodes.filter(n => {
-      if (n.id === currentNodeId) return false;
-      if (n.type !== 'factory' && n.type !== 'regional_hub') return false;
-      if (isAncestor(currentNodeId, n.id)) return false;
-      return true;
     });
   };
 
   const handleNextStep = () => {
-    if (configCities.length === 0) {
-      setConfigError("Please add at least one city.");
+    if (modalData.length === 0) {
+      setConfigError("Please add at least one storage location.");
       return;
     }
-    if (configCities.some(c => !c.trim())) {
-      setConfigError("Please fill in all city names.");
+    if (modalData.some(d => !d.name.trim())) {
+      setConfigError("Please fill in all storage location names.");
       return;
     }
 
-    const names = configCities.map(c => c.trim().toLowerCase());
+    // Check for duplicate names
+    const names = modalData.map(d => d.name.trim().toLowerCase());
     const hasDuplicates = names.some((name, idx) => names.indexOf(name) !== idx);
     if (hasDuplicates) {
-      setConfigError("Each city must have a unique name.");
+      setConfigError("Each storage location must have a unique name.");
       return;
     }
 
@@ -290,53 +200,37 @@ function Dashboard({ user }) {
   };
 
   const handleSaveConfig = async () => {
-    if (configCities.length === 0) {
-      setConfigError("Please add at least one city.");
+    if (modalData.length === 0) {
+      setConfigError("Please add at least one storage location.");
       return;
     }
-    if (configNodes.length === 0) {
-      setConfigError("Please configure at least one storage location node.");
-      return;
-    }
-    if (configNodes.some(n => !n.name.trim())) {
-      setConfigError("Please fill in all node names.");
-      return;
-    }
-    if (configNodes.some(n => n.stock === '' || isNaN(parseInt(n.stock)) || parseInt(n.stock) < 0)) {
-      setConfigError("Please enter a valid non-negative stock number for all nodes.");
+    if (modalData.some(d => !d.name.trim() || d.stock === '')) {
+      setConfigError("Please fill in all storage location details and stock amounts.");
       return;
     }
 
-    const cityNodeNames = {};
-    for (const node of configNodes) {
-      const cityName = node.city.trim().toLowerCase();
-      const nodeName = node.name.trim().toLowerCase();
-      if (!cityNodeNames[cityName]) {
-        cityNodeNames[cityName] = new Set();
-      }
-      if (cityNodeNames[cityName].has(nodeName)) {
-        setConfigError(`Duplicate node name "${node.name}" in city "${node.city}". Node names must be unique within each city.`);
-        return;
-      }
-      cityNodeNames[cityName].add(nodeName);
+    // Check for duplicate names
+    const names = modalData.map(d => d.name.trim().toLowerCase());
+    const hasDuplicates = names.some((name, idx) => names.indexOf(name) !== idx);
+    if (hasDuplicates) {
+      setConfigError("Each storage location must have a unique name.");
+      return;
     }
 
-    // Build ID to final unique key mapping
-    const idToKeyMap = {};
-    configNodes.forEach(node => {
-      idToKeyMap[node.id] = `${node.city.trim()} - ${node.name.trim()}`;
+    // Sanitize parents
+    const nodeNames = modalData.map(d => d.name.trim());
+    modalData.forEach(row => {
+      if (row.parent && !nodeNames.includes(row.parent)) {
+        row.parent = '';
+      }
     });
 
     const newInventory = {};
-    configNodes.forEach(node => {
-      const key = idToKeyMap[node.id];
-      const parentKey = node.parent ? (idToKeyMap[node.parent] || '') : '';
-      newInventory[key] = {
-        stock: parseInt(node.stock),
-        type: node.type,
-        parent: parentKey,
-        city: node.city.trim(),
-        displayName: node.name.trim()
+    modalData.forEach(d => {
+      newInventory[d.name.trim()] = {
+        stock: parseInt(d.stock),
+        type: d.type || 'local_dc',
+        parent: d.parent || ''
       };
     });
 
@@ -497,7 +391,7 @@ function Dashboard({ user }) {
               >
                 {Object.entries(inventory || {}).map(([name, node]) => (
                   <option key={name} value={name} className="bg-slate-800 text-white">
-                    {node.city || name} - {node.displayName || (node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC')} ({node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'})
+                    {name} ({node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'})
                   </option>
                 ))}
               </select>
@@ -584,9 +478,9 @@ function Dashboard({ user }) {
                           <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none"></div>
                           <div className="flex justify-between items-start relative z-10">
                             <div className="overflow-hidden pr-2">
-                              <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{node.city || name}</h3>
+                              <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{name}</h3>
                               <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
-                                {node.displayName || 'Factory'}
+                                Independent Source Location
                               </p>
                             </div>
                             <div className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
@@ -624,14 +518,14 @@ function Dashboard({ user }) {
                             {name === simTargetCity && !isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>}
                             <div className="flex justify-between items-start relative z-10">
                               <div className="overflow-hidden pr-2">
-                                <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{node.city || name}</h3>
+                                <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{name}</h3>
                                 {node.parent ? (
                                   <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold truncate" title={`Supplied by: ${node.parent}`}>
-                                    {node.displayName || 'Hub'} Supplied by: <span className="text-indigo-400 font-bold">{inventory[node.parent]?.displayName ? `${inventory[node.parent].city} - ${inventory[node.parent].displayName}` : node.parent}</span>
+                                    Supplied by: <span className="text-indigo-400 font-bold">{node.parent}</span>
                                   </p>
                                 ) : (
                                   <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
-                                    {node.displayName || 'Hub'} (Independent)
+                                    Independent Hub Location
                                   </p>
                                 )}
                               </div>
@@ -671,14 +565,14 @@ function Dashboard({ user }) {
                             {name === simTargetCity && !isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>}
                             <div className="flex justify-between items-start relative z-10">
                               <div className="overflow-hidden pr-2">
-                                <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{node.city || name}</h3>
+                                <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{name}</h3>
                                 {node.parent ? (
                                   <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold truncate" title={`Supplied by: ${node.parent}`}>
-                                    {node.displayName || 'DC'} Supplied by: <span className="text-purple-400 font-bold">{inventory[node.parent]?.displayName ? `${inventory[node.parent].city} - ${inventory[node.parent].displayName}` : node.parent}</span>
+                                    Supplied by: <span className="text-purple-400 font-bold">{node.parent}</span>
                                   </p>
                                 ) : (
                                   <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
-                                    {node.displayName || 'DC'} (Independent)
+                                    Independent DC Location
                                   </p>
                                 )}
                               </div>
@@ -828,24 +722,24 @@ function Dashboard({ user }) {
 
             <div className="flex-1 overflow-y-auto pr-1 my-4 space-y-4 custom-scrollbar">
               {configStep === 1 ? (
-                // Step 1: Configure City Names only
-                configCities.map((cityName, index) => (
+                // Step 1: Configure names only
+                modalData.map((data, index) => (
                   <div key={index} className="flex items-center gap-3 p-4 bg-black/20 rounded-2xl border border-white/5 relative">
                     <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">City Name</label>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Storage Location Name</label>
                       <input 
                         type="text" 
                         placeholder="e.g. Mumbai"
-                        value={cityName}
-                        onChange={(e) => handleCityNameChange(index, e.target.value)}
+                        value={data.name}
+                        onChange={(e) => handleModalDataChange(index, 'name', e.target.value)}
                         className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
                       />
                     </div>
                     <div className="pt-5">
                       <button 
-                        onClick={() => handleDeleteCity(index)}
+                        onClick={() => handleDeleteWarehouse(index)}
                         className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                        title="Remove City"
+                        title="Remove Storage Location"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -853,102 +747,60 @@ function Dashboard({ user }) {
                   </div>
                 ))
               ) : (
-                // Step 2: Configure Details (Multiple nodes per City)
-                configCities.map((city, cityIdx) => {
-                  const cityNodes = configNodes.filter(n => n.city === city);
+                // Step 2: Configure Details below the name
+                modalData.map((data, index) => {
+                  const validParents = getValidParents(index);
                   return (
-                    <div key={cityIdx} className="p-5 bg-black/30 rounded-2xl border border-white/5 space-y-4 relative animate-in fade-in duration-200">
-                      <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                        <h4 className="text-base font-extrabold text-blue-400 uppercase tracking-wider">{city}</h4>
-                        <button
-                          onClick={() => handleAddNode(city)}
-                          className="px-2.5 py-1 text-[10px] font-bold text-white bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/30 rounded-lg transition-all flex items-center gap-1"
-                        >
-                          <Plus className="h-3 w-3" />
-                          <span>Add Node</span>
-                        </button>
+                    <div key={index} className="p-4 bg-black/20 rounded-2xl border border-white/5 space-y-3 relative animate-in fade-in duration-200">
+                      <div className="flex justify-between items-center">
+                        <h4 className="text-sm font-bold text-white uppercase tracking-wider">{data.name}</h4>
+                        <span className="text-[10px] text-slate-500 font-semibold uppercase">Configure Details</span>
                       </div>
 
-                      {cityNodes.length === 0 ? (
-                        <p className="text-xs text-slate-500 italic py-2 text-center">No nodes configured under {city}. Click Add Node to configure storage facilities.</p>
-                      ) : (
-                        <div className="space-y-4">
-                          {cityNodes.map((node) => {
-                            const validParents = getValidParents(node.id);
-                            return (
-                              <div key={node.id} className="p-3 bg-white/5 rounded-xl border border-white/5 space-y-3 relative group/node">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    <div>
-                                      <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Node Type</label>
-                                      <select 
-                                        value={node.type || 'local_dc'}
-                                        onChange={(e) => handleNodeChange(node.id, 'type', e.target.value)}
-                                        className="block w-full px-2 py-1.5 border border-white/10 rounded-lg bg-slate-800 text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                                      >
-                                        <option value="factory">Factory (T1)</option>
-                                        <option value="regional_hub">Regional Hub (T2)</option>
-                                        <option value="local_dc">Local DC (T3)</option>
-                                      </select>
-                                    </div>
-                                    <div>
-                                      <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Node Name</label>
-                                      <input 
-                                        type="text" 
-                                        value={node.name}
-                                        onChange={(e) => handleNodeChange(node.id, 'name', e.target.value)}
-                                        className="block w-full px-2 py-1.5 border border-white/10 rounded-lg bg-white/5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                        placeholder="e.g. Factory 1"
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="pt-4">
-                                    <button 
-                                      onClick={() => handleDeleteNode(node.id)}
-                                      className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all opacity-80 hover:opacity-100"
-                                      title="Remove Node"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-2">
-                                  {/* Stock */}
-                                  <div>
-                                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Initial Stock</label>
-                                    <input 
-                                      type="number" 
-                                      min="0"
-                                      value={node.stock}
-                                      onChange={(e) => handleNodeChange(node.id, 'stock', e.target.value)}
-                                      className="block w-full px-2 py-1.5 border border-white/10 rounded-lg bg-white/5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                      placeholder="100"
-                                    />
-                                  </div>
-                                  {/* Parent */}
-                                  <div>
-                                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Parent Location</label>
-                                    <select 
-                                      value={node.parent || ''}
-                                      disabled={node.type === 'factory' || validParents.length === 0}
-                                      onChange={(e) => handleNodeChange(node.id, 'parent', e.target.value)}
-                                      className="block w-full px-2 py-1.5 border border-white/10 rounded-lg bg-slate-800 text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                                    >
-                                      <option value="">None</option>
-                                      {validParents.map(parentOpt => (
-                                        <option key={parentOpt.id} value={parentOpt.id}>
-                                          {parentOpt.city} - {parentOpt.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
+                      <div className="grid grid-cols-3 gap-3">
+                        {/* Tier / Type */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tier / Type</label>
+                          <select 
+                            value={data.type || 'local_dc'}
+                            onChange={(e) => handleModalDataChange(index, 'type', e.target.value)}
+                            className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer"
+                          >
+                            <option value="factory">Factory (T1)</option>
+                            <option value="regional_hub">Regional Hub (T2)</option>
+                            <option value="local_dc">Local DC (T3)</option>
+                          </select>
                         </div>
-                      )}
+                        {/* Stock */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Stock</label>
+                          <input 
+                            type="number" 
+                            min="0"
+                            placeholder="100"
+                            value={data.stock}
+                            onChange={(e) => handleModalDataChange(index, 'stock', e.target.value)}
+                            className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
+                          />
+                        </div>
+                        {/* Parent Storage Location */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Parent Location</label>
+                          <select 
+                            value={data.parent || ''}
+                            disabled={data.type === 'factory' || validParents.length === 0}
+                            onChange={(e) => handleModalDataChange(index, 'parent', e.target.value)}
+                            className="block w-full px-3 py-2 border border-white/10 rounded-lg bg-slate-800 text-white text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <option value="">None</option>
+                            {validParents.map(parentOpt => (
+                              <option key={parentOpt.name} value={parentOpt.name}>
+                                {parentOpt.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
                     </div>
                   );
                 })
@@ -958,11 +810,11 @@ function Dashboard({ user }) {
             <div className="pt-2 flex flex-col gap-4">
               {configStep === 1 && (
                 <button 
-                  onClick={handleAddCity}
+                  onClick={handleAddWarehouse}
                   className="w-full py-2.5 px-4 border border-dashed border-white/10 rounded-xl hover:border-white/20 text-sm font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center space-x-1.5"
                 >
                   <Plus className="h-4 w-4" />
-                  <span>Add City</span>
+                  <span>Add Storage Location</span>
                 </button>
               )}
 
