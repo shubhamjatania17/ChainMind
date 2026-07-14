@@ -1,17 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { database, ref, remove, auth, googleProvider } from '../firebase';
+import { database, ref, remove, auth, googleProvider, onValue } from '../firebase';
 import { 
   updateProfile, 
   updatePassword, 
   deleteUser, 
   EmailAuthProvider, 
   reauthenticateWithCredential,
-  reauthenticateWithPopup,
-  multiFactor,
-  PhoneAuthProvider,
-  PhoneMultiFactorGenerator,
-  RecaptchaVerifier
+  reauthenticateWithPopup
 } from 'firebase/auth';
 import { 
   User, 
@@ -27,6 +23,9 @@ import {
   PackageOpen,
   Info
 } from 'lucide-react';
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 function Settings({ user }) {
   const navigate = useNavigate();
@@ -46,26 +45,12 @@ function Settings({ user }) {
   const [passwordError, setPasswordError] = useState('');
 
   // MFA settings state
-  const [mfaConfig, setMfaConfig] = useState(() => {
-    try {
-      const enrolledFactors = multiFactor(auth.currentUser || user).enrolledFactors;
-      if (enrolledFactors && enrolledFactors.length > 0) {
-        return {
-          enabled: true,
-          type: enrolledFactors[0].factorId,
-          phoneNumber: enrolledFactors[0].phoneNumber || enrolledFactors[0].displayName || ''
-        };
-      }
-    } catch (err) {
-      console.error("Error checking MFA status on init:", err);
-    }
-    return { enabled: false, type: '', phoneNumber: '' };
-  });
+  const [mfaConfig, setMfaConfig] = useState({ enabled: false, type: '', phoneNumber: '' });
   const [isMfaModalOpen, setIsMfaModalOpen] = useState(false);
-  const [mfaStep, setMfaStep] = useState(1); // 1: Input phone number, 2: Verification code
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [isDisableMfaModalOpen, setIsDisableMfaModalOpen] = useState(false);
+  const [otpauthUrl, setOtpauthUrl] = useState('');
+  const [tempSecret, setTempSecret] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
-  const [verificationId, setVerificationId] = useState('');
   const [mfaError, setMfaError] = useState('');
   const [isMfaLoading, setIsMfaLoading] = useState(false);
   
@@ -91,16 +76,15 @@ function Settings({ user }) {
 
   const updateMfaState = () => {
     try {
-      const enrolledFactors = multiFactor(auth.currentUser).enrolledFactors;
-      if (enrolledFactors.length > 0) {
+      const dbRef = ref(database, `users/${auth.currentUser.uid}/mfaEnabled`);
+      onValue(dbRef, (snapshot) => {
+        const enabled = snapshot.val() || false;
         setMfaConfig({
-          enabled: true,
-          type: enrolledFactors[0].factorId,
-          phoneNumber: enrolledFactors[0].phoneNumber || enrolledFactors[0].displayName || ''
+          enabled: enabled,
+          type: enabled ? 'totp' : '',
+          phoneNumber: enabled ? 'Authenticator App' : ''
         });
-      } else {
-        setMfaConfig({ enabled: false, type: '', phoneNumber: '' });
-      }
+      }, { onlyOnce: true });
     } catch (err) {
       console.error("Error checking MFA status:", err);
     }
@@ -114,22 +98,27 @@ function Settings({ user }) {
       // Defer to prevent synchronous setState warning during rendering
       await Promise.resolve();
       if (!active) return;
-      updateMfaState();
-      setIsLoadingSettings(false);
+
+      const dbRef = ref(database, `users/${auth.currentUser.uid}/mfaEnabled`);
+      onValue(dbRef, (snapshot) => {
+        if (!active) return;
+        const enabled = snapshot.val() || false;
+        setMfaConfig({
+          enabled: enabled,
+          type: enabled ? 'totp' : '',
+          phoneNumber: enabled ? 'Authenticator App' : ''
+        });
+        setIsLoadingSettings(false);
+      }, (err) => {
+        console.error("Error reading mfaEnabled on mount:", err);
+        setIsLoadingSettings(false);
+      });
     };
 
     initializeSettings();
 
     return () => {
       active = false;
-      if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear();
-        } catch (e) {
-          console.error("Error clearing recaptcha:", e);
-        }
-        window.recaptchaVerifier = null;
-      }
     };
   }, []);
 
@@ -244,57 +233,25 @@ function Settings({ user }) {
   };
 
   // MFA Enablement Wizards
-  const handleStartMfaSetup = () => {
+  const handleStartMfaSetup = async () => {
     setMfaError('');
     setVerificationCode('');
-    setPhoneNumber('');
-    setVerificationId('');
-    setMfaStep(1);
-    setIsMfaModalOpen(true);
-  };
-
-  const sendVerificationCodeAction = async () => {
-    if (!phoneNumber) {
-      setMfaError('Please enter a phone number.');
-      return;
-    }
-    setMfaError('');
+    setOtpauthUrl('');
+    setTempSecret('');
     setIsMfaLoading(true);
+    setIsMfaModalOpen(true);
 
     try {
-      let verifier = window.recaptchaVerifier;
-      if (!verifier) {
-        verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible'
-        });
-        window.recaptchaVerifier = verifier;
-      }
-
-      const session = await multiFactor(auth.currentUser).getSession();
-      
-      const phoneInfoOptions = {
-        phoneNumber,
-        session
-      };
-
-      const phoneAuthProvider = new PhoneAuthProvider(auth);
-      const vId = await phoneAuthProvider.verifyPhoneNumber(phoneInfoOptions, verifier);
-      setVerificationId(vId);
-      setMfaStep(2);
+      const token = await auth.currentUser.getIdToken();
+      const res = await axios.post(`${API_URL}/api/mfa/setup`, { idToken: token });
+      setOtpauthUrl(res.data.otpauthUrl);
+      setTempSecret(res.data.tempSecret);
     } catch (err) {
-      console.error("MFA Enrol SMS Send Error:", err);
-      if (err.code === 'auth/requires-recent-login') {
-        throw err;
-      }
-      setMfaError(err.message || 'Failed to send verification SMS.');
+      console.error("MFA Setup Init Error:", err);
+      setMfaError(err.response?.data?.error || 'Failed to initialize MFA setup.');
     } finally {
       setIsMfaLoading(false);
     }
-  };
-
-  const handleSendVerificationCode = (e) => {
-    if (e) e.preventDefault();
-    performSensitiveAction(sendVerificationCodeAction, 'mfa_setup')();
   };
 
   const verifyAndEnableMfaAction = async () => {
@@ -306,18 +263,23 @@ function Settings({ user }) {
     setIsMfaLoading(true);
 
     try {
-      const credential = PhoneAuthProvider.credential(verificationId, verificationCode);
-      const assertion = PhoneMultiFactorGenerator.assertion(credential);
-      await multiFactor(auth.currentUser).enroll(assertion, 'SMS Phone');
+      const token = await auth.currentUser.getIdToken();
+      await axios.post(`${API_URL}/api/mfa/verify`, {
+        idToken: token,
+        otpToken: verificationCode
+      });
       
+      await auth.currentUser.getIdToken(true);
+      sessionStorage.setItem(`mfa_verified_${auth.currentUser.uid}`, 'true');
+
       updateMfaState();
       setIsMfaModalOpen(false);
     } catch (err) {
       console.error("MFA Enrol Verify Error:", err);
-      if (err.code === 'auth/requires-recent-login') {
+      if (err.code === 'auth/requires-recent-login' || err.response?.data?.error === 'auth/requires-recent-login') {
         throw err;
       }
-      setMfaError(err.message || 'Invalid verification code or enrollment failed.');
+      setMfaError(err.response?.data?.error || 'Invalid verification code or enrollment failed.');
     } finally {
       setIsMfaLoading(false);
     }
@@ -330,23 +292,36 @@ function Settings({ user }) {
 
   // Disable MFA Action
   const disableMfaAction = async () => {
+    if (verificationCode.length !== 6) {
+      setMfaError('Please enter a 6-digit code.');
+      return;
+    }
     setIsMfaLoading(true);
     try {
-      const userMfa = multiFactor(auth.currentUser);
-      const enrolled = userMfa.enrolledFactors;
-      if (enrolled.length > 0) {
-        await userMfa.unenroll(enrolled[0]);
-      }
+      const token = await auth.currentUser.getIdToken();
+      await axios.post(`${API_URL}/api/mfa/disable`, {
+        idToken: token,
+        otpToken: verificationCode
+      });
+      
+      await auth.currentUser.getIdToken(true);
+      sessionStorage.removeItem(`mfa_verified_${auth.currentUser.uid}`);
+
       updateMfaState();
-      setIsMfaLoading(false);
+      setIsDisableMfaModalOpen(false);
     } catch (err) {
       console.error(err);
+      if (err.code === 'auth/requires-recent-login' || err.response?.data?.error === 'auth/requires-recent-login') {
+        throw err;
+      }
+      setMfaError(err.response?.data?.error || 'Failed to disable MFA. Make sure code is correct.');
+    } finally {
       setIsMfaLoading(false);
-      throw err;
     }
   };
 
-  const handleDisableMfa = () => {
+  const handleDisableMfa = (e) => {
+    if (e) e.preventDefault();
     performSensitiveAction(disableMfaAction, 'mfa_disable')();
   };
 
@@ -589,7 +564,7 @@ function Settings({ user }) {
 
               <div className="max-w-lg space-y-4">
                 <p className="text-slate-300 text-sm leading-relaxed">
-                  When enabled, accessing your logged-in session will require completing a secondary validation check via SMS code.
+                  When enabled, accessing your logged-in session will require entering a 6-digit TOTP validation code from an authenticator app (such as Google Authenticator or Authy).
                 </p>
 
                 {mfaConfig.enabled ? (
@@ -599,12 +574,16 @@ function Settings({ user }) {
                       <div>
                         <p className="font-semibold text-white">Active Authentication Method</p>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          SMS Phone Code ({mfaConfig.phoneNumber})
+                          Authenticator App (TOTP)
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={handleDisableMfa}
+                      onClick={() => {
+                        setMfaError('');
+                        setVerificationCode('');
+                        setIsDisableMfaModalOpen(true);
+                      }}
                       className="px-4 py-2 border border-purple-500/30 rounded-xl text-xs font-bold text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition-all cursor-pointer"
                     >
                       Disable Two-Factor Auth
@@ -667,47 +646,32 @@ function Settings({ user }) {
               </div>
             )}
 
-            {/* Step 1: Input Phone Number */}
-            {mfaStep === 1 && (
-              <form onSubmit={handleSendVerificationCode} className="space-y-6 py-4">
-                <p className="text-slate-300 text-sm">Enter the mobile phone number where you wish to receive verification codes (include country code, e.g. +15551234567).</p>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Phone Number</label>
-                  <input
-                    type="tel"
-                    required
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="+15551234567"
-                    className="appearance-none block w-full px-4 py-3 border border-white/10 rounded-xl bg-black/20 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-mono"
-                  />
-                </div>
-                
-                <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                  <button
-                    type="button"
-                    onClick={() => setIsMfaModalOpen(false)}
-                    className="py-2.5 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isMfaLoading}
-                    className="py-2.5 px-5 rounded-xl text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 shadow-lg shadow-purple-600/20 transition-all disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
-                  >
-                    {isMfaLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                    <span>Send SMS Code</span>
-                  </button>
-                </div>
-              </form>
-            )}
+            {isMfaLoading && !otpauthUrl ? (
+              <div className="py-12 flex flex-col justify-center items-center space-y-4">
+                <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                <p className="text-slate-400 text-sm">Generating secure MFA keys...</p>
+              </div>
+            ) : (
+              <form onSubmit={handleVerifyAndEnableMfa} className="space-y-6 py-2">
+                <div className="space-y-3">
+                  <p className="text-slate-300 text-sm">1. Scan this QR code with your Authenticator app (Google Authenticator, Authy, etc.):</p>
+                  
+                  {otpauthUrl && (
+                    <div className="flex justify-center p-4 bg-white rounded-2xl w-fit mx-auto shadow-inner">
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(otpauthUrl)}`}
+                        alt="MFA QR Code"
+                        className="w-[180px] h-[180px]"
+                      />
+                    </div>
+                  )}
 
-            {/* Step 2: Verification Code */}
-            {mfaStep === 2 && (
-              <form onSubmit={handleVerifyAndEnableMfa} className="space-y-6 py-4">
-                <div className="space-y-3 text-center">
-                  <p className="text-slate-300 text-sm">Enter the 6-digit code sent to your phone to complete setup.</p>
+                  <p className="text-slate-300 text-sm">Or enter this key manually:</p>
+                  <div className="bg-black/40 border border-white/10 p-3 rounded-xl text-center select-all font-mono text-purple-400 text-sm tracking-wider">
+                    {tempSecret}
+                  </div>
+                  
+                  <p className="text-slate-300 text-sm pt-2">2. Enter the 6-digit verification code generated by your app:</p>
                 </div>
 
                 <div>
@@ -722,13 +686,13 @@ function Settings({ user }) {
                   />
                 </div>
 
-                <div className="flex justify-between gap-3 pt-4 border-t border-white/5">
+                <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
                   <button
                     type="button"
-                    onClick={() => setMfaStep(1)}
+                    onClick={() => setIsMfaModalOpen(false)}
                     className="py-2.5 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
                   >
-                    Back
+                    Cancel
                   </button>
                   <button
                     type="submit"
@@ -736,11 +700,62 @@ function Settings({ user }) {
                     className="py-2.5 px-5 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/20 transition-all disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
                   >
                     {isMfaLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                    <span>Confirm & Enable</span>
+                    <span>Verify & Enable</span>
                   </button>
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MFA Disable Confirmation Modal */}
+      {isDisableMfaModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="relative w-full max-w-md bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-2xl flex flex-col animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-2 font-display text-red-400">Disable Two-Factor Auth</h3>
+            
+            {mfaError && (
+              <div className="mb-4 bg-red-500/10 border border-red-500/50 p-3 rounded-lg text-sm text-red-400 text-center font-semibold">
+                {mfaError}
+              </div>
+            )}
+
+            <form onSubmit={handleDisableMfa} className="space-y-6 py-2">
+              <div className="space-y-3">
+                <p className="text-slate-300 text-sm">Please enter the 6-digit verification code from your authenticator app to disable 2FA.</p>
+              </div>
+
+              <div>
+                <input
+                  type="text"
+                  maxLength={6}
+                  required
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                  className="appearance-none block w-full text-center tracking-widest text-2xl font-bold py-3 border border-white/10 rounded-xl bg-black/20 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-mono"
+                  placeholder="000000"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setIsDisableMfaModalOpen(false)}
+                  className="py-2.5 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isMfaLoading || verificationCode.length !== 6}
+                  className="py-2.5 px-5 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/20 transition-all disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
+                >
+                  {isMfaLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  <span>Confirm & Disable</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

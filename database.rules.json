@@ -2,8 +2,17 @@
   "rules": {
     "users": {
       "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
+        ".read": "$uid === auth.uid && (!data.child('mfaEnabled').val() || auth.token.mfaVerifiedFor === auth.token.auth_time)",
+        ".write": "$uid === auth.uid && (!data.child('mfaEnabled').val() || auth.token.mfaVerifiedFor === auth.token.auth_time)",
+        "mfaEnabled": {
+          ".read": "$uid === auth.uid"
+        }
+      }
+    },
+    "mfaSecrets": {
+      "$uid": {
+        ".read": "false",
+        ".write": "false"
       }
     }
   }

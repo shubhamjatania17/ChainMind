@@ -2,16 +2,15 @@ import { useState, useEffect } from 'react';
 import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from '../firebase';
 import { 
   getAdditionalUserInfo, 
-  deleteUser,
-  getMultiFactorResolver,
-  PhoneAuthProvider,
-  PhoneMultiFactorGenerator,
-  RecaptchaVerifier
+  deleteUser
 } from 'firebase/auth';
 import { PackageOpen, Mail, Lock, ArrowRight, Loader2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import axios from 'axios';
 
-function Login() {
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+function Login({ forceMfa, onVerified }) {
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,55 +18,16 @@ function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Native MFA State
+  // Custom TOTP MFA State
   const [showMfa, setShowMfa] = useState(false);
   const [mfaCode, setMfaCode] = useState('');
   const [mfaError, setMfaError] = useState('');
-  const [mfaResolver, setMfaResolver] = useState(null);
-  const [verificationId, setVerificationId] = useState('');
-  const [mfaHint, setMfaHint] = useState(null);
-  const [sendingMfaCode, setSendingMfaCode] = useState(false);
 
   useEffect(() => {
-    return () => {
-      if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear();
-        } catch (e) {
-          console.error("Error clearing recaptcha:", e);
-        }
-        window.recaptchaVerifier = null;
-      }
-    };
-  }, []);
-
-  const sendMfaCode = async (resolver, hint) => {
-    setMfaError('');
-    setSendingMfaCode(true);
-    try {
-      let verifier = window.recaptchaVerifier;
-      if (!verifier) {
-        verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible'
-        });
-        window.recaptchaVerifier = verifier;
-      }
-
-      const phoneInfoOptions = {
-        multiFactorHint: hint,
-        session: resolver.session
-      };
-
-      const phoneAuthProvider = new PhoneAuthProvider(auth);
-      const vId = await phoneAuthProvider.verifyPhoneNumber(phoneInfoOptions, verifier);
-      setVerificationId(vId);
-    } catch (err) {
-      console.error("MFA Send SMS Error:", err);
-      setMfaError(err.message || 'Failed to send MFA verification code.');
-    } finally {
-      setSendingMfaCode(false);
+    if (forceMfa) {
+      setShowMfa(true);
     }
-  };
+  }, [forceMfa]);
 
   const handleEmailAuth = async (e) => {
     e.preventDefault();
@@ -81,19 +41,7 @@ function Login() {
       }
     } catch (err) {
       console.error(err);
-      if (err.code === 'auth/multi-factor-auth-required') {
-        const resolver = getMultiFactorResolver(auth, err);
-        setMfaResolver(resolver);
-        
-        const phoneHint = resolver.hints.find(hint => hint.factorId === 'phone');
-        if (phoneHint) {
-          setMfaHint(phoneHint);
-          setShowMfa(true);
-          await sendMfaCode(resolver, phoneHint);
-        } else {
-          setError('Only Phone MFA is supported currently.');
-        }
-      } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
         setError('Account does not exist or invalid credentials. Please sign up first.');
       } else {
         setError(err.message || 'Authentication failed. Please try again.');
@@ -109,12 +57,25 @@ function Login() {
     setLoading(true);
 
     try {
-      const cred = PhoneAuthProvider.credential(verificationId, mfaCode);
-      const assertion = PhoneMultiFactorGenerator.assertion(cred);
-      await mfaResolver.resolveSignIn(assertion);
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await axios.post(`${API_URL}/api/mfa/verify`, {
+        idToken,
+        otpToken: mfaCode
+      });
+
+      if (res.data.success) {
+        // Force refresh token to receive new custom claims
+        await auth.currentUser.getIdToken(true);
+        // Persist verification status in sessionStorage
+        sessionStorage.setItem(`mfa_verified_${auth.currentUser.uid}`, 'true');
+        
+        if (onVerified) {
+          onVerified();
+        }
+      }
     } catch (err) {
       console.error("MFA Verification Error:", err);
-      setMfaError('Invalid verification code. Please try again.');
+      setMfaError(err.response?.data?.error || 'Invalid verification code. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -132,28 +93,13 @@ function Login() {
       }
     } catch (err) {
       console.error(err);
-      if (err.code === 'auth/multi-factor-auth-required') {
-        const resolver = getMultiFactorResolver(auth, err);
-        setMfaResolver(resolver);
-        
-        const phoneHint = resolver.hints.find(hint => hint.factorId === 'phone');
-        if (phoneHint) {
-          setMfaHint(phoneHint);
-          setShowMfa(true);
-          await sendMfaCode(resolver, phoneHint);
-        } else {
-          setError('Only Phone MFA is supported currently.');
-        }
-      } else {
-        setError(err.message || 'Google Sign-In failed.');
-      }
+      setError(err.message || 'Google Sign-In failed.');
     }
   };
 
-  const handleCancelMfa = () => {
+  const handleCancelMfa = async () => {
+    await auth.signOut();
     setShowMfa(false);
-    setMfaResolver(null);
-    setMfaHint(null);
     setMfaCode('');
     setMfaError('');
   };
@@ -166,9 +112,6 @@ function Login() {
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-600/10 blur-[120px]"></div>
       </div>
-
-      {/* Recaptcha container */}
-      <div id="recaptcha-container" className="hidden"></div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 text-center">
         <Link to="/" className="inline-flex items-center justify-center h-16 w-16 bg-linear-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-xl shadow-blue-500/20 mb-4 hover:scale-105 transition-transform">
@@ -186,23 +129,22 @@ function Login() {
         <div className="bg-white/5 backdrop-blur-xl py-8 px-4 shadow-2xl sm:rounded-3xl sm:px-10 border border-white/10">
           
           {showMfa ? (
-            /* MFA SMS code entry form */
+            /* MFA TOTP code entry form */
             <form className="space-y-6" onSubmit={handleMfaVerify}>
               {mfaError && (
-                <div className="bg-red-500/10 border border-red-500/50 p-3 rounded-lg text-sm text-red-400 text-center">
+                <div className="bg-red-500/10 border border-red-500/50 p-3 rounded-lg text-sm text-red-400 text-center font-semibold">
                   {mfaError}
                 </div>
               )}
 
               <div className="text-center text-slate-300 text-sm">
                 <ShieldCheck className="h-12 w-12 text-purple-400 mx-auto mb-3" />
-                <p>We sent a verification code to:</p>
-                <p className="font-bold text-white mt-1 font-mono text-base">{mfaHint?.phoneNumber}</p>
+                <p>Please enter the 6-digit TOTP code from your authenticator app.</p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 text-center mb-2">
-                  6-Digit SMS Code
+                  6-Digit Verification Code
                 </label>
                 <input
                   type="text"
@@ -234,18 +176,10 @@ function Login() {
                 <button
                   type="button"
                   onClick={handleCancelMfa}
-                  className="flex-1 flex items-center justify-center space-x-1.5 py-2 px-3 border border-white/10 rounded-xl text-xs font-semibold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                  className="w-full flex items-center justify-center space-x-1.5 py-2.5 px-4 border border-white/10 rounded-xl text-sm font-semibold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
                 >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  <span>Back</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => sendMfaCode(mfaResolver, mfaHint)}
-                  disabled={sendingMfaCode}
-                  className="flex-1 py-2 px-3 border border-purple-500/20 rounded-xl text-xs font-semibold text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 transition-colors cursor-pointer"
-                >
-                  {sendingMfaCode ? 'Sending...' : 'Resend Code'}
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Back to Sign In</span>
                 </button>
               </div>
             </form>
