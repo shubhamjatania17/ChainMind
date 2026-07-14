@@ -22,7 +22,6 @@ import {
   Check, 
   Loader2, 
   AlertTriangle, 
-  Smartphone,
   Eye,
   EyeOff,
   PackageOpen,
@@ -47,7 +46,21 @@ function Settings({ user }) {
   const [passwordError, setPasswordError] = useState('');
 
   // MFA settings state
-  const [mfaConfig, setMfaConfig] = useState({ enabled: false, type: '', phoneNumber: '' });
+  const [mfaConfig, setMfaConfig] = useState(() => {
+    try {
+      const enrolledFactors = multiFactor(auth.currentUser || user).enrolledFactors;
+      if (enrolledFactors && enrolledFactors.length > 0) {
+        return {
+          enabled: true,
+          type: enrolledFactors[0].factorId,
+          phoneNumber: enrolledFactors[0].phoneNumber || enrolledFactors[0].displayName || ''
+        };
+      }
+    } catch (err) {
+      console.error("Error checking MFA status on init:", err);
+    }
+    return { enabled: false, type: '', phoneNumber: '' };
+  });
   const [isMfaModalOpen, setIsMfaModalOpen] = useState(false);
   const [mfaStep, setMfaStep] = useState(1); // 1: Input phone number, 2: Verification code
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -95,10 +108,20 @@ function Settings({ user }) {
 
   // Load MFA configuration natively on mount
   useEffect(() => {
-    updateMfaState();
-    setIsLoadingSettings(false);
+    let active = true;
+
+    const initializeSettings = async () => {
+      // Defer to prevent synchronous setState warning during rendering
+      await Promise.resolve();
+      if (!active) return;
+      updateMfaState();
+      setIsLoadingSettings(false);
+    };
+
+    initializeSettings();
 
     return () => {
+      active = false;
       if (window.recaptchaVerifier) {
         try {
           window.recaptchaVerifier.clear();
@@ -230,8 +253,7 @@ function Settings({ user }) {
     setIsMfaModalOpen(true);
   };
 
-  const handleSendVerificationCode = async (e) => {
-    e.preventDefault();
+  const sendVerificationCodeAction = async () => {
     if (!phoneNumber) {
       setMfaError('Please enter a phone number.');
       return;
@@ -261,16 +283,21 @@ function Settings({ user }) {
       setMfaStep(2);
     } catch (err) {
       console.error("MFA Enrol SMS Send Error:", err);
+      if (err.code === 'auth/requires-recent-login') {
+        throw err;
+      }
       setMfaError(err.message || 'Failed to send verification SMS.');
     } finally {
       setIsMfaLoading(false);
     }
   };
 
-  const handleVerifyAndEnableMfa = async (e) => {
-    e.preventDefault();
-    setMfaError('');
+  const handleSendVerificationCode = (e) => {
+    if (e) e.preventDefault();
+    performSensitiveAction(sendVerificationCodeAction, 'mfa_setup')();
+  };
 
+  const verifyAndEnableMfaAction = async () => {
     if (verificationCode.length !== 6) {
       setMfaError('Please enter a 6-digit code.');
       return;
@@ -287,10 +314,18 @@ function Settings({ user }) {
       setIsMfaModalOpen(false);
     } catch (err) {
       console.error("MFA Enrol Verify Error:", err);
+      if (err.code === 'auth/requires-recent-login') {
+        throw err;
+      }
       setMfaError(err.message || 'Invalid verification code or enrollment failed.');
     } finally {
       setIsMfaLoading(false);
     }
+  };
+
+  const handleVerifyAndEnableMfa = (e) => {
+    if (e) e.preventDefault();
+    performSensitiveAction(verifyAndEnableMfaAction, 'mfa_enroll')();
   };
 
   // Disable MFA Action
