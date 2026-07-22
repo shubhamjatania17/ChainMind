@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { database, ref, remove, auth, googleProvider, onValue } from '../firebase';
+import { database, ref, remove, auth, googleProvider } from '../firebase';
 import { 
   updateProfile, 
   updatePassword, 
@@ -12,7 +12,6 @@ import {
 import { 
   User, 
   Lock, 
-  ShieldCheck, 
   Trash2, 
   ArrowLeft, 
   Check, 
@@ -23,9 +22,6 @@ import {
   PackageOpen,
   Info
 } from 'lucide-react';
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 function Settings({ user }) {
   const navigate = useNavigate();
@@ -44,18 +40,10 @@ function Settings({ user }) {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  // MFA settings state
-  const [mfaConfig, setMfaConfig] = useState({ enabled: false, type: '', phoneNumber: '' });
-  const [isMfaModalOpen, setIsMfaModalOpen] = useState(false);
-  const [isDisableMfaModalOpen, setIsDisableMfaModalOpen] = useState(false);
-  const [otpauthUrl, setOtpauthUrl] = useState('');
-  const [tempSecret, setTempSecret] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [mfaError, setMfaError] = useState('');
-  const [isMfaLoading, setIsMfaLoading] = useState(false);
+
   
   // Re-authentication modal state
-  const [reauthType, setReauthType] = useState(''); // 'password' or 'delete' or 'mfa_disable'
+  const [reauthType, setReauthType] = useState(''); // 'password' or 'delete'
   const [reauthCallback, setReauthCallback] = useState(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [reauthError, setReauthError] = useState('');
@@ -68,59 +56,8 @@ function Settings({ user }) {
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // General loading states
-  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
-
   // Determine auth provider (Google vs Email)
   const isGoogleUser = user.providerData.some(p => p.providerId === 'google.com');
-
-  const updateMfaState = () => {
-    try {
-      const dbRef = ref(database, `users/${auth.currentUser.uid}/mfaEnabled`);
-      onValue(dbRef, (snapshot) => {
-        const enabled = snapshot.val() || false;
-        setMfaConfig({
-          enabled: enabled,
-          type: enabled ? 'totp' : '',
-          phoneNumber: enabled ? 'Authenticator App' : ''
-        });
-      }, { onlyOnce: true });
-    } catch (err) {
-      console.error("Error checking MFA status:", err);
-    }
-  };
-
-  // Load MFA configuration natively on mount
-  useEffect(() => {
-    let active = true;
-
-    const initializeSettings = async () => {
-      // Defer to prevent synchronous setState warning during rendering
-      await Promise.resolve();
-      if (!active) return;
-
-      const dbRef = ref(database, `users/${auth.currentUser.uid}/mfaEnabled`);
-      onValue(dbRef, (snapshot) => {
-        if (!active) return;
-        const enabled = snapshot.val() || false;
-        setMfaConfig({
-          enabled: enabled,
-          type: enabled ? 'totp' : '',
-          phoneNumber: enabled ? 'Authenticator App' : ''
-        });
-        setIsLoadingSettings(false);
-      }, (err) => {
-        console.error("Error reading mfaEnabled on mount:", err);
-        setIsLoadingSettings(false);
-      });
-    };
-
-    initializeSettings();
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   // Handle re-authentication wrapper
   const performSensitiveAction = (callback, actionType) => {
@@ -232,98 +169,7 @@ function Settings({ user }) {
     performSensitiveAction(updatePasswordAction, 'password')();
   };
 
-  // MFA Enablement Wizards
-  const handleStartMfaSetup = async () => {
-    setMfaError('');
-    setVerificationCode('');
-    setOtpauthUrl('');
-    setTempSecret('');
-    setIsMfaLoading(true);
-    setIsMfaModalOpen(true);
 
-    try {
-      const token = await auth.currentUser.getIdToken();
-      const res = await axios.post(`${API_URL}/api/mfa/setup`, { idToken: token });
-      setOtpauthUrl(res.data.otpauthUrl);
-      setTempSecret(res.data.tempSecret);
-    } catch (err) {
-      console.error("MFA Setup Init Error:", err);
-      setMfaError(err.response?.data?.error || 'Failed to initialize MFA setup.');
-    } finally {
-      setIsMfaLoading(false);
-    }
-  };
-
-  const verifyAndEnableMfaAction = async () => {
-    if (verificationCode.length !== 6) {
-      setMfaError('Please enter a 6-digit code.');
-      return;
-    }
-
-    setIsMfaLoading(true);
-
-    try {
-      const token = await auth.currentUser.getIdToken();
-      await axios.post(`${API_URL}/api/mfa/verify`, {
-        idToken: token,
-        otpToken: verificationCode
-      });
-      
-      await auth.currentUser.getIdToken(true);
-      sessionStorage.setItem(`mfa_verified_${auth.currentUser.uid}`, 'true');
-
-      updateMfaState();
-      setIsMfaModalOpen(false);
-    } catch (err) {
-      console.error("MFA Enrol Verify Error:", err);
-      if (err.code === 'auth/requires-recent-login' || err.response?.data?.error === 'auth/requires-recent-login') {
-        throw err;
-      }
-      setMfaError(err.response?.data?.error || 'Invalid verification code or enrollment failed.');
-    } finally {
-      setIsMfaLoading(false);
-    }
-  };
-
-  const handleVerifyAndEnableMfa = (e) => {
-    if (e) e.preventDefault();
-    performSensitiveAction(verifyAndEnableMfaAction, 'mfa_enroll')();
-  };
-
-  // Disable MFA Action
-  const disableMfaAction = async () => {
-    if (verificationCode.length !== 6) {
-      setMfaError('Please enter a 6-digit code.');
-      return;
-    }
-    setIsMfaLoading(true);
-    try {
-      const token = await auth.currentUser.getIdToken();
-      await axios.post(`${API_URL}/api/mfa/disable`, {
-        idToken: token,
-        otpToken: verificationCode
-      });
-      
-      await auth.currentUser.getIdToken(true);
-      sessionStorage.removeItem(`mfa_verified_${auth.currentUser.uid}`);
-
-      updateMfaState();
-      setIsDisableMfaModalOpen(false);
-    } catch (err) {
-      console.error(err);
-      if (err.code === 'auth/requires-recent-login' || err.response?.data?.error === 'auth/requires-recent-login') {
-        throw err;
-      }
-      setMfaError(err.response?.data?.error || 'Failed to disable MFA. Make sure code is correct.');
-    } finally {
-      setIsMfaLoading(false);
-    }
-  };
-
-  const handleDisableMfa = (e) => {
-    if (e) e.preventDefault();
-    performSensitiveAction(disableMfaAction, 'mfa_disable')();
-  };
 
   // Account Deletion Action
   const deleteAccountAction = async () => {
@@ -395,12 +241,7 @@ function Settings({ user }) {
           <p className="text-slate-400 mt-1 text-sm">Manage your account profile, credentials, and multi-factor security.</p>
         </div>
 
-        {isLoadingSettings ? (
-          <div className="py-20 flex justify-center items-center">
-            <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-          </div>
-        ) : (
-          <div className="space-y-8 animate-in fade-in duration-200">
+        <div className="space-y-8 animate-in fade-in duration-200">
             
             {/* Card: Basic Details */}
             <div className="bg-slate-900/40 backdrop-blur-md p-6 rounded-3xl shadow-xl border border-white/10 relative overflow-hidden group">
@@ -543,64 +384,7 @@ function Settings({ user }) {
               )}
             </div>
 
-            {/* Card: Multi-Factor Authentication */}
-            <div className="bg-slate-900/40 backdrop-blur-md p-6 rounded-3xl shadow-xl border border-white/10 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/5 rounded-full blur-3xl group-hover:bg-purple-500/10 transition-colors pointer-events-none"></div>
 
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
-                <div>
-                  <h3 className="text-xl font-bold text-white font-display flex items-center space-x-2.5">
-                    <ShieldCheck className="h-5 w-5 text-purple-400" />
-                    <span>Two-Factor Authentication (2FA)</span>
-                  </h3>
-                  <p className="text-slate-400 mt-1 text-xs">Add an extra layer of protection to your supply chain digital twins.</p>
-                </div>
-                <div>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${mfaConfig.enabled ? 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-purple-500/10 shadow-md' : 'bg-slate-800 text-slate-400 border-white/5'}`}>
-                    {mfaConfig.enabled ? 'MFA Enabled' : 'MFA Disabled'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="max-w-lg space-y-4">
-                <p className="text-slate-300 text-sm leading-relaxed">
-                  When enabled, accessing your logged-in session will require entering a 6-digit TOTP validation code from an authenticator app (such as Google Authenticator or Authy).
-                </p>
-
-                {mfaConfig.enabled ? (
-                  <div className="bg-purple-500/5 border border-purple-500/20 p-5 rounded-2xl space-y-4">
-                    <div className="flex items-start space-x-3 text-slate-300 text-sm">
-                      <Check className="h-5 w-5 text-purple-400 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-semibold text-white">Active Authentication Method</p>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          Authenticator App (TOTP)
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setMfaError('');
-                        setVerificationCode('');
-                        setIsDisableMfaModalOpen(true);
-                      }}
-                      className="px-4 py-2 border border-purple-500/30 rounded-xl text-xs font-bold text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition-all cursor-pointer"
-                    >
-                      Disable Two-Factor Auth
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <button
-                      onClick={handleStartMfaSetup}
-                      className="px-6 py-2.5 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-purple-500/20 transition-all text-sm cursor-pointer"
-                    >
-                      Set Up Two-Factor Auth
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
 
             {/* Card: Danger Zone */}
             <div className="bg-red-500/5 backdrop-blur-md p-6 rounded-3xl shadow-xl border border-red-500/10 relative overflow-hidden">
@@ -631,134 +415,9 @@ function Settings({ user }) {
             </div>
 
           </div>
-        )}
       </main>
 
-      {/* MFA Setup Wizard Modal */}
-      {isMfaModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="relative w-full max-w-md bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-2xl flex flex-col animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold text-white mb-2 font-display">Configure Two-Factor Auth</h3>
-            
-            {mfaError && (
-              <div className="mb-4 bg-red-500/10 border border-red-500/50 p-3 rounded-lg text-sm text-red-400 text-center font-semibold">
-                {mfaError}
-              </div>
-            )}
 
-            {isMfaLoading && !otpauthUrl ? (
-              <div className="py-12 flex flex-col justify-center items-center space-y-4">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
-                <p className="text-slate-400 text-sm">Generating secure MFA keys...</p>
-              </div>
-            ) : (
-              <form onSubmit={handleVerifyAndEnableMfa} className="space-y-6 py-2">
-                <div className="space-y-3">
-                  <p className="text-slate-300 text-sm">1. Scan this QR code with your Authenticator app (Google Authenticator, Authy, etc.):</p>
-                  
-                  {otpauthUrl && (
-                    <div className="flex justify-center p-4 bg-white rounded-2xl w-fit mx-auto shadow-inner">
-                      <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(otpauthUrl)}`}
-                        alt="MFA QR Code"
-                        className="w-[180px] h-[180px]"
-                      />
-                    </div>
-                  )}
-
-                  <p className="text-slate-300 text-sm">Or enter this key manually:</p>
-                  <div className="bg-black/40 border border-white/10 p-3 rounded-xl text-center select-all font-mono text-purple-400 text-sm tracking-wider">
-                    {tempSecret}
-                  </div>
-                  
-                  <p className="text-slate-300 text-sm pt-2">2. Enter the 6-digit verification code generated by your app:</p>
-                </div>
-
-                <div>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    required
-                    value={verificationCode}
-                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                    className="appearance-none block w-full text-center tracking-widest text-2xl font-bold py-3 border border-white/10 rounded-xl bg-black/20 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono"
-                    placeholder="000000"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                  <button
-                    type="button"
-                    onClick={() => setIsMfaModalOpen(false)}
-                    className="py-2.5 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isMfaLoading || verificationCode.length !== 6}
-                    className="py-2.5 px-5 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/20 transition-all disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
-                  >
-                    {isMfaLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                    <span>Verify & Enable</span>
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* MFA Disable Confirmation Modal */}
-      {isDisableMfaModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="relative w-full max-w-md bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-2xl flex flex-col animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold mb-2 font-display text-red-400">Disable Two-Factor Auth</h3>
-            
-            {mfaError && (
-              <div className="mb-4 bg-red-500/10 border border-red-500/50 p-3 rounded-lg text-sm text-red-400 text-center font-semibold">
-                {mfaError}
-              </div>
-            )}
-
-            <form onSubmit={handleDisableMfa} className="space-y-6 py-2">
-              <div className="space-y-3">
-                <p className="text-slate-300 text-sm">Please enter the 6-digit verification code from your authenticator app to disable 2FA.</p>
-              </div>
-
-              <div>
-                <input
-                  type="text"
-                  maxLength={6}
-                  required
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                  className="appearance-none block w-full text-center tracking-widest text-2xl font-bold py-3 border border-white/10 rounded-xl bg-black/20 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all font-mono"
-                  placeholder="000000"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                <button
-                  type="button"
-                  onClick={() => setIsDisableMfaModalOpen(false)}
-                  className="py-2.5 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isMfaLoading || verificationCode.length !== 6}
-                  className="py-2.5 px-5 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/20 transition-all disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
-                >
-                  {isMfaLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  <span>Confirm & Disable</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Account Deletion Confirmation Modal */}
       {isDeleteModalOpen && (
