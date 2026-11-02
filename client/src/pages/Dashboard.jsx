@@ -8,9 +8,205 @@ import remarkGfm from 'remark-gfm';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+// Helper to calculate card dimensions, column spans, and typography based on the stock number
+const getStockBoxProps = (stock, cardSize = 'auto') => {
+  const numVal = Number(stock);
+  const formatted = !isNaN(numVal) && stock !== '' && stock !== null ? numVal.toLocaleString('en-US') : String(stock ?? '0');
+  const digits = String(stock ?? '').replace(/[^0-9]/g, '').length || formatted.length;
+
+  if (cardSize === 'wide') {
+    return {
+      formatted,
+      colSpan: 'col-span-1 md:col-span-2',
+      fontSize: digits >= 11 ? 'text-2xl sm:text-3xl' : digits >= 7 ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl',
+      badgeText: digits >= 8 ? 'High Volume' : '',
+    };
+  }
+
+  if (cardSize === 'compact') {
+    return {
+      formatted,
+      colSpan: 'col-span-1',
+      fontSize: digits >= 11 ? 'text-xl sm:text-2xl' : digits >= 8 ? 'text-2xl sm:text-3xl' : digits >= 5 ? 'text-3xl' : 'text-3xl sm:text-4xl',
+      badgeText: '',
+    };
+  }
+
+  // AUTO MODE: Box dimensions and typography adjust dynamically according to the number length!
+  if (digits <= 4) {
+    // 0 - 9,999 (e.g. 100, 500)
+    return {
+      formatted,
+      colSpan: 'col-span-1',
+      fontSize: 'text-4xl sm:text-5xl',
+      badgeText: '',
+    };
+  } else if (digits <= 6) {
+    // 10,000 - 999,999
+    return {
+      formatted,
+      colSpan: 'col-span-1',
+      fontSize: 'text-3xl sm:text-4xl',
+      badgeText: '',
+    };
+  } else if (digits <= 8) {
+    // 1,000,000 - 99,999,999
+    return {
+      formatted,
+      colSpan: 'col-span-1 sm:col-span-2 xl:col-span-2',
+      fontSize: 'text-2xl sm:text-3xl lg:text-4xl',
+      badgeText: 'Large Volume',
+    };
+  } else if (digits <= 11) {
+    // 100,000,000 - 99,999,999,999 (High volume - ensures 9+ digit numbers like 100,000,000 fit perfectly)
+    return {
+      formatted,
+      colSpan: 'col-span-1 sm:col-span-2 xl:col-span-2',
+      fontSize: 'text-2xl sm:text-3xl lg:text-4xl',
+      badgeText: 'High Volume',
+    };
+  } else {
+    // 100,000,000,000+
+    return {
+      formatted,
+      colSpan: 'col-span-1 sm:col-span-2 lg:col-span-3 xl:col-span-2',
+      fontSize: 'text-xl sm:text-2xl lg:text-3xl',
+      badgeText: 'Ultra Volume',
+    };
+  }
+};
+
+// Intelligently compute grid columns for each tier to prevent empty voids and cramped boxes
+const getTierGridClass = (items, cardSize = 'auto') => {
+  if (cardSize === 'wide') {
+    return 'grid grid-cols-1 md:grid-cols-2 gap-6';
+  }
+  if (cardSize === 'compact') {
+    return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6';
+  }
+
+  // AUTO MODE:
+  if (items.length === 1) {
+    return 'grid grid-cols-1 max-w-xl gap-6';
+  }
+  if (items.length === 2) {
+    return 'grid grid-cols-1 md:grid-cols-2 gap-6';
+  }
+  if (items.length === 3) {
+    return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6';
+  }
+  return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6';
+};
+
+// Reusable card for all storage location tiers with adaptive sizing based on number
+const LocationStatusCard = ({ name, node, inventory, simTargetCity, onSelect, cardSize, tierType }) => {
+  const isTarget = name === simTargetCity;
+  const isRisk = tierType !== 'factory' && Number(node.stock) < 80;
+  const boxProps = getStockBoxProps(node.stock, cardSize);
+
+  return (
+    <div 
+      onClick={() => onSelect && onSelect(name)}
+      className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col justify-between min-h-41.25{boxProps.colSpan} ${
+        isTarget 
+          ? 'border-blue-500/60 shadow-blue-500/15 ring-1 ring-blue-500/30' 
+          : 'border-white/5 hover:border-white/20'
+      }`}
+      title={isTarget ? `${node.city || name} (Active simulation target)` : `Click to select ${node.city || name} as target`}
+    >
+      {/* Dynamic Background Glow */}
+      {isRisk ? (
+        <div className="absolute top-0 right-0 w-36 h-36 bg-red-500/10 rounded-full blur-2xl pointer-events-none" />
+      ) : isTarget ? (
+        <div className="absolute top-0 right-0 w-36 h-36 bg-blue-500/15 rounded-full blur-2xl pointer-events-none" />
+      ) : (
+        <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl pointer-events-none ${
+          tierType === 'factory' ? 'bg-blue-500/5' : tierType === 'regional_hub' ? 'bg-indigo-500/5' : 'bg-purple-500/5'
+        }`} />
+      )}
+
+      {/* Header Info */}
+      <div className="flex justify-between items-start relative z-10 gap-3">
+        <div className="overflow-hidden pr-1 min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold text-white font-display truncate" title={node.city || name}>
+              {node.city || name}
+            </h3>
+            {boxProps.badgeText && (
+              <span className="hidden sm:inline-block text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                {boxProps.badgeText}
+              </span>
+            )}
+          </div>
+
+          {tierType === 'factory' ? (
+            <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold truncate" title={node.displayName || 'Factory'}>
+              {node.displayName || 'Factory'}
+            </p>
+          ) : node.parent ? (
+            <p 
+              className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold truncate" 
+              title={`Supplied by: ${inventory[node.parent]?.displayName ? `${inventory[node.parent].city} - ${inventory[node.parent].displayName}` : node.parent}`}
+            >
+              {node.displayName || (tierType === 'regional_hub' ? 'Hub' : 'DC')} Supplied by: {' '}
+              <span className={`font-bold ${tierType === 'regional_hub' ? 'text-indigo-400' : 'text-purple-400'}`}>
+                {inventory[node.parent]?.displayName ? `${inventory[node.parent].city} - ${inventory[node.parent].displayName}` : node.parent}
+              </span>
+            </p>
+          ) : (
+            <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold truncate">
+              {node.displayName || (tierType === 'regional_hub' ? 'Hub' : 'DC')} (Independent)
+            </p>
+          )}
+        </div>
+
+        {/* Status Badge */}
+        <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm shrink-0 ${
+          isRisk 
+            ? 'bg-red-500/10 text-red-400 border-red-500/20' 
+            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+        }`}>
+          {isRisk ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
+          <span>{isRisk ? 'Critical' : 'Stable'}</span>
+        </div>
+      </div>
+
+      {/* Stock Number & Units */}
+      <div className="mt-6 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 relative z-10">
+        <span 
+          className={`${boxProps.fontSize} font-extrabold tracking-tight font-display ${
+            isRisk ? 'text-red-400' : 'text-white'
+          } select-all transition-all duration-200 leading-none break-all sm:break-normal`}
+          title={`${boxProps.formatted} units`}
+        >
+          {boxProps.formatted}
+        </span>
+        <span className="text-slate-500 text-sm font-medium shrink-0">units</span>
+      </div>
+    </div>
+  );
+};
+
 function Dashboard({ user }) {
   const [inventory, setInventory] = useState(null);
   const [dbLoaded, setDbLoaded] = useState(false);
+  
+  // Storage Location Box Size Preference ('auto' | 'wide' | 'compact')
+  const [cardSize, setCardSize] = useState(() => {
+    try {
+      return localStorage.getItem('chainmind_card_size') || 'auto';
+    } catch {
+      return 'auto';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('chainmind_card_size', cardSize);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [cardSize]);
   
   // Config Modal State
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -403,7 +599,7 @@ function Dashboard({ user }) {
       setDownloadingPDF(false);
     } catch (error) {
       console.error('Failed to generate PDF:', error);
-      await showCustomAlert('Failed to generate PDF mitigation report. Ensure PDFMonkey API key is correct.');
+      await showCustomAlert('Failed to generate PDF mitigation report. Ensure Doppio API key is configured correctly.');
       setDownloadingPDF(false);
     }
   };
@@ -571,7 +767,7 @@ function Dashboard({ user }) {
             <div className="relative border-l border-white/10 pl-6 ml-3 space-y-4">
               {simLogs.map((log, idx) => (
                 <div key={idx} className="relative">
-                  <div className="absolute left-[-31px] top-1.5 h-2 w-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50"></div>
+                  <div className="absolute -left-7.75 top-1.5 h-2 w-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50"></div>
                   <p className="text-slate-300 text-sm leading-relaxed">{log}</p>
                 </div>
               ))}
@@ -581,7 +777,53 @@ function Dashboard({ user }) {
 
         {/* Warehouse Network Cards */}
         <div>
-          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 ml-2">Global Storage Location Status</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 ml-2">
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">
+              Global Storage Location Status
+            </h3>
+            
+            {/* Box Size / Density Adjuster */}
+            <div className="flex items-center space-x-1.5 bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-xl p-1 text-xs self-start sm:self-auto shadow-inner">
+              <span className="text-[10px] uppercase font-bold text-slate-500 px-2 tracking-wider">Box Size:</span>
+              <button 
+                type="button"
+                onClick={() => setCardSize('auto')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  cardSize === 'auto' 
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+                title="Automatically adjusts box sizes and typography according to number length"
+              >
+                Auto (By Number)
+              </button>
+              <button 
+                type="button"
+                onClick={() => setCardSize('wide')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  cardSize === 'wide' 
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+                title="Force wider box sizes for all storage locations"
+              >
+                Wide
+              </button>
+              <button 
+                type="button"
+                onClick={() => setCardSize('compact')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  cardSize === 'compact' 
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+                title="Compact box sizes for dense supply chain networks"
+              >
+                Compact
+              </button>
+            </div>
+          </div>
+
           {!inventory || Object.keys(inventory).length === 0 ? (
             <div className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-8 border border-dashed border-white/10 text-center py-12 flex flex-col items-center">
               <PackageOpen className="h-12 w-12 text-slate-500 mb-3" />
@@ -600,135 +842,91 @@ function Dashboard({ user }) {
           ) : (
             <div className="space-y-10">
               {/* Factories Tier */}
-              {Object.entries(inventory).filter(entry => entry[1].type === 'factory').length > 0 && (
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-blue-400 uppercase tracking-widest ml-2 flex items-center gap-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-blue-400"></div>
-                    <span>Tier 1: Production Factories</span>
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {Object.entries(inventory)
-                      .filter(entry => entry[1].type === 'factory')
-                      .map(([name, node]) => (
-                        <div key={name} className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 ${name === simTargetCity ? 'border-blue-500/50 shadow-blue-500/10' : 'border-white/5 hover:border-white/20'}`}>
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none"></div>
-                          <div className="flex justify-between items-start relative z-10">
-                            <div className="overflow-hidden pr-2">
-                              <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{node.city || name}</h3>
-                              <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
-                                {node.displayName || 'Factory'}
-                              </p>
-                            </div>
-                            <div className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                              <CheckCircle className="h-3 w-3" />
-                              <span>Stable</span>
-                            </div>
-                          </div>
-                          <div className="mt-8 flex items-baseline space-x-2 relative z-10">
-                            <span className="text-5xl font-extrabold tracking-tight font-display text-white">
-                              {node.stock}
-                            </span>
-                            <span className="text-slate-500 text-sm font-medium">units</span>
-                          </div>
-                        </div>
+              {(() => {
+                const factories = Object.entries(inventory).filter(entry => entry[1].type === 'factory');
+                if (factories.length === 0) return null;
+                return (
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-blue-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                      <div className="h-1.5 w-1.5 rounded-full bg-blue-400"></div>
+                      <span>Tier 1: Production Factories</span>
+                      <span className="text-[10px] text-slate-500 font-normal lowercase tracking-normal">({factories.length} {factories.length === 1 ? 'node' : 'nodes'})</span>
+                    </h4>
+                    <div className={getTierGridClass(factories, cardSize)}>
+                      {factories.map(([name, node]) => (
+                        <LocationStatusCard
+                          key={name}
+                          name={name}
+                          node={node}
+                          inventory={inventory}
+                          simTargetCity={simTargetCity}
+                          onSelect={setSimTargetCity}
+                          cardSize={cardSize}
+                          tierType="factory"
+                        />
                       ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Regional Hubs Tier */}
-              {Object.entries(inventory).filter(entry => entry[1].type === 'regional_hub').length > 0 && (
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest ml-2 flex items-center gap-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-indigo-400"></div>
-                    <span>Tier 2: Regional Hubs</span>
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {Object.entries(inventory)
-                      .filter(entry => entry[1].type === 'regional_hub')
-                      .map(([name, node]) => {
-                        const isRisk = node.stock < 80;
-                        return (
-                          <div key={name} className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 ${name === simTargetCity ? 'border-blue-500/50 shadow-blue-500/10' : 'border-white/5 hover:border-white/20'}`}>
-                            {isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none"></div>}
-                            {name === simTargetCity && !isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>}
-                            <div className="flex justify-between items-start relative z-10">
-                              <div className="overflow-hidden pr-2">
-                                <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{node.city || name}</h3>
-                                {node.parent ? (
-                                  <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold truncate" title={`Supplied by: ${node.parent}`}>
-                                    {node.displayName || 'Hub'} Supplied by: <span className="text-indigo-400 font-bold">{inventory[node.parent]?.displayName ? `${inventory[node.parent].city} - ${inventory[node.parent].displayName}` : node.parent}</span>
-                                  </p>
-                                ) : (
-                                  <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
-                                    {node.displayName || 'Hub'} (Independent)
-                                  </p>
-                                )}
-                              </div>
-                              <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm ${isRisk ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
-                                {isRisk ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
-                                <span>{isRisk ? 'Critical' : 'Stable'}</span>
-                              </div>
-                            </div>
-                            <div className="mt-8 flex items-baseline space-x-2 relative z-10">
-                              <span className={`text-5xl font-extrabold tracking-tight font-display ${isRisk ? 'text-red-400' : 'text-white'}`}>
-                                {node.stock}
-                              </span>
-                              <span className="text-slate-500 text-sm font-medium">units</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+              {(() => {
+                const hubs = Object.entries(inventory).filter(entry => entry[1].type === 'regional_hub');
+                if (hubs.length === 0) return null;
+                return (
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                      <div className="h-1.5 w-1.5 rounded-full bg-indigo-400"></div>
+                      <span>Tier 2: Regional Hubs</span>
+                      <span className="text-[10px] text-slate-500 font-normal lowercase tracking-normal">({hubs.length} {hubs.length === 1 ? 'node' : 'nodes'})</span>
+                    </h4>
+                    <div className={getTierGridClass(hubs, cardSize)}>
+                      {hubs.map(([name, node]) => (
+                        <LocationStatusCard
+                          key={name}
+                          name={name}
+                          node={node}
+                          inventory={inventory}
+                          simTargetCity={simTargetCity}
+                          onSelect={setSimTargetCity}
+                          cardSize={cardSize}
+                          tierType="regional_hub"
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Local Distribution Centers Tier */}
-              {Object.entries(inventory).filter(entry => entry[1].type === 'local_dc' || (!entry[1].type)).length > 0 && (
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-purple-400"></div>
-                    <span>Tier 3: Local Distribution Centers</span>
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {Object.entries(inventory)
-                      .filter(entry => entry[1].type === 'local_dc' || (!entry[1].type))
-                      .map(([name, node]) => {
-                        const isRisk = node.stock < 80;
-                        return (
-                          <div key={name} className={`relative bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 shadow-xl border overflow-hidden transition-all duration-300 hover:-translate-y-1 ${name === simTargetCity ? 'border-blue-500/50 shadow-blue-500/10' : 'border-white/5 hover:border-white/20'}`}>
-                            {isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none"></div>}
-                            {name === simTargetCity && !isRisk && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>}
-                            <div className="flex justify-between items-start relative z-10">
-                              <div className="overflow-hidden pr-2">
-                                <h3 className="text-xl font-bold text-white font-display truncate" title={name}>{node.city || name}</h3>
-                                {node.parent ? (
-                                  <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold truncate" title={`Supplied by: ${node.parent}`}>
-                                    {node.displayName || 'DC'} Supplied by: <span className="text-purple-400 font-bold">{inventory[node.parent]?.displayName ? `${inventory[node.parent].city} - ${inventory[node.parent].displayName}` : node.parent}</span>
-                                  </p>
-                                ) : (
-                                  <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-wider font-semibold">
-                                    {node.displayName || 'DC'} (Independent)
-                                  </p>
-                                )}
-                              </div>
-                              <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center space-x-1.5 border shadow-sm ${isRisk ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
-                                {isRisk ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
-                                <span>{isRisk ? 'Critical' : 'Stable'}</span>
-                              </div>
-                            </div>
-                            <div className="mt-8 flex items-baseline space-x-2 relative z-10">
-                              <span className={`text-5xl font-extrabold tracking-tight font-display ${isRisk ? 'text-red-400' : 'text-white'}`}>
-                                {node.stock}
-                              </span>
-                              <span className="text-slate-500 text-sm font-medium">units</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+              {(() => {
+                const dcs = Object.entries(inventory).filter(entry => entry[1].type === 'local_dc' || (!entry[1].type));
+                if (dcs.length === 0) return null;
+                return (
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                      <div className="h-1.5 w-1.5 rounded-full bg-purple-400"></div>
+                      <span>Tier 3: Local Distribution Centers</span>
+                      <span className="text-[10px] text-slate-500 font-normal lowercase tracking-normal">({dcs.length} {dcs.length === 1 ? 'node' : 'nodes'})</span>
+                    </h4>
+                    <div className={getTierGridClass(dcs, cardSize)}>
+                      {dcs.map(([name, node]) => (
+                        <LocationStatusCard
+                          key={name}
+                          name={name}
+                          node={node}
+                          inventory={inventory}
+                          simTargetCity={simTargetCity}
+                          onSelect={setSimTargetCity}
+                          cardSize={cardSize}
+                          tierType="local_dc"
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>
@@ -752,7 +950,7 @@ function Dashboard({ user }) {
             )}
           </div>
           
-          <div className="p-8 min-h-[200px]">
+          <div className="p-8 min-h-50">
             {loadingInsight ? (
               <div className="flex flex-col space-y-4 animate-pulse">
                 <div className="h-4 bg-white/10 rounded-md w-3/4"></div>

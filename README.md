@@ -15,7 +15,7 @@ ChainMind is a dynamic, real-time digital twin application designed to visualize
 - **Database**: Firebase Realtime Database
 - **Authentication**: Firebase Auth (Email/Password & Google Sign-In)
 - **AI Integration**: Google Generative AI SDK (Gemini)
-- **PDF Generation**: PDFMonkey
+- **PDF Generation**: Doppio (doppio.sh)
 
 ## Features
 
