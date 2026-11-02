@@ -1,6 +1,6 @@
 # ChainMind 📦
 
-(version: v1.1.2)
+(version: v2.0.2)
 
 **An AI-Powered Supply Chain Digital Twin**  
 
