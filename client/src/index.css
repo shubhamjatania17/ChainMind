@@ -33,6 +33,16 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 35px -5px rgba(14, 165, 233, 0.35);
 }
 
+/* OpenStreetMap Dark Cyber Filter (100% Free, Zero API Keys, Zero Watermarks) */
+.map-tiles-dark .leaflet-tile,
+.map-tiles-dark img {
+  filter: brightness(0.65) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.75) !important;
+}
+
+.leaflet-container {
+  background-color: #030712 !important;
+}
+
 /* Global Themed Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

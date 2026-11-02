@@ -65,10 +65,10 @@ export default function LocationMapPickerModal({
         zoomControl: true
       });
 
-      // CartoDB Dark Matter tile layer (100% Free, matches ChainMind dark aesthetics)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
+      // OpenStreetMap tile layer (100% Free, zero API key required, styled via dark CSS filter)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        className: 'map-tiles-dark',
         maxZoom: 19
       }).addTo(map);
 
