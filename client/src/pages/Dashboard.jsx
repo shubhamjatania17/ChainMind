@@ -1,38 +1,24 @@
 import { useState, useEffect } from 'react';
 import { database, ref, onValue, set, remove, signOut, auth } from '../firebase';
-import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download, Plus, Trash2, X, ChevronUp, ChevronDown, Sliders, User } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Activity, BrainCircuit, LogOut, Loader2, RefreshCw, Settings, PackageOpen, Download, Plus, Trash2, X, ChevronUp, ChevronDown, Sliders, User, MapPin } from 'lucide-react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import GeospatialNetworkMap from '../components/GeospatialNetworkMap';
+import LocationMapPickerModal from '../components/LocationMapPickerModal';
+import { getCoordinatesForCity } from '../utils/geoUtils';
+import Logo from '../components/Logo';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-// Helper to calculate card dimensions, column spans, and typography based on the stock number
-const getStockBoxProps = (stock, cardSize = 'auto') => {
+// Helper to calculate card dimensions, column spans, and typography strictly based on the stock number
+const getStockBoxProps = (stock) => {
   const numVal = Number(stock);
   const formatted = !isNaN(numVal) && stock !== '' && stock !== null ? numVal.toLocaleString('en-US') : String(stock ?? '0');
   const digits = String(stock ?? '').replace(/[^0-9]/g, '').length || formatted.length;
 
-  if (cardSize === 'wide') {
-    return {
-      formatted,
-      colSpan: 'col-span-1 md:col-span-2',
-      fontSize: digits >= 11 ? 'text-2xl sm:text-3xl' : digits >= 7 ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl',
-      badgeText: digits >= 8 ? 'High Volume' : '',
-    };
-  }
-
-  if (cardSize === 'compact') {
-    return {
-      formatted,
-      colSpan: 'col-span-1',
-      fontSize: digits >= 11 ? 'text-xl sm:text-2xl' : digits >= 8 ? 'text-2xl sm:text-3xl' : digits >= 5 ? 'text-3xl' : 'text-3xl sm:text-4xl',
-      badgeText: '',
-    };
-  }
-
-  // AUTO MODE: Box dimensions and typography adjust dynamically according to the number length!
+  // Box dimensions and typography adjust dynamically according to the number length!
   if (digits <= 4) {
     // 0 - 9,999 (e.g. 100, 500)
     return {
@@ -77,15 +63,7 @@ const getStockBoxProps = (stock, cardSize = 'auto') => {
 };
 
 // Intelligently compute grid columns for each tier to prevent empty voids and cramped boxes
-const getTierGridClass = (items, cardSize = 'auto') => {
-  if (cardSize === 'wide') {
-    return 'grid grid-cols-1 md:grid-cols-2 gap-6';
-  }
-  if (cardSize === 'compact') {
-    return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6';
-  }
-
-  // AUTO MODE:
+const getTierGridClass = (items) => {
   if (items.length === 1) {
     return 'grid grid-cols-1 max-w-xl gap-6';
   }
@@ -99,10 +77,10 @@ const getTierGridClass = (items, cardSize = 'auto') => {
 };
 
 // Reusable card for all storage location tiers with adaptive sizing based on number
-const LocationStatusCard = ({ name, node, inventory, simTargetCity, onSelect, cardSize, tierType }) => {
+const LocationStatusCard = ({ name, node, inventory, simTargetCity, onSelect, tierType }) => {
   const isTarget = name === simTargetCity;
   const isRisk = tierType !== 'factory' && Number(node.stock) < 80;
-  const boxProps = getStockBoxProps(node.stock, cardSize);
+  const boxProps = getStockBoxProps(node.stock);
 
   return (
     <div 
@@ -191,29 +169,13 @@ function Dashboard({ user }) {
   const [inventory, setInventory] = useState(null);
   const [dbLoaded, setDbLoaded] = useState(false);
   
-  // Storage Location Box Size Preference ('auto' | 'wide' | 'compact')
-  const [cardSize, setCardSize] = useState(() => {
-    try {
-      return localStorage.getItem('chainmind_card_size') || 'auto';
-    } catch {
-      return 'auto';
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('chainmind_card_size', cardSize);
-    } catch (err) {
-      console.error(err);
-    }
-  }, [cardSize]);
-  
   // Config Modal State
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [configCities, setConfigCities] = useState([]);
   const [configNodes, setConfigNodes] = useState([]);
   const [configError, setConfigError] = useState('');
   const [configStep, setConfigStep] = useState(1);
+  const [activePickerNode, setActivePickerNode] = useState(null);
 
   // Simulation State
   const [simTargetCity, setSimTargetCity] = useState('');
@@ -268,6 +230,9 @@ function Dashboard({ user }) {
       let parent = '';
       let city = '';
       let displayName = '';
+      let lat = null;
+      let lng = null;
+      let address = '';
 
       if (typeof val === 'number') {
         stock = val;
@@ -277,6 +242,9 @@ function Dashboard({ user }) {
         parent = val.parent || '';
         city = val.city || '';
         displayName = val.displayName || '';
+        lat = val.lat != null ? Number(val.lat) : null;
+        lng = val.lng != null ? Number(val.lng) : null;
+        address = val.address || '';
       }
 
       // If city or displayName are missing (e.g. legacy data), extract them from key
@@ -294,12 +262,23 @@ function Dashboard({ user }) {
         displayName = type === 'factory' ? 'Factory' : type === 'regional_hub' ? 'Regional Hub' : 'Local DC';
       }
 
+      // If coordinates missing, assign realistic defaults based on resolved city
+      if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
+        const defaultCoords = getCoordinatesForCity(city);
+        lat = defaultCoords.lat;
+        lng = defaultCoords.lng;
+        if (!address) address = defaultCoords.label || `${city} Logistics Hub`;
+      }
+
       normalized[key] = {
         stock,
         type,
         parent,
         city,
-        displayName
+        displayName,
+        lat,
+        lng,
+        address
       };
     });
     return normalized;
@@ -334,16 +313,24 @@ function Dashboard({ user }) {
       setConfigCities(uniqueCities);
       
       // Extract nodes
-      const extractedNodes = Object.entries(inventory).map(([key, node]) => ({
-        id: key,
-        city: node.city,
-        name: node.displayName || (node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'),
-        type: node.type || 'local_dc',
-        stock: String(node.stock),
-        parent: node.parent || ''
-      }));
+      const extractedNodes = Object.entries(inventory).map(([key, node]) => {
+        const fallback = getCoordinatesForCity(node.city);
+        return {
+          id: key,
+          city: node.city,
+          name: node.displayName || (node.type === 'factory' ? 'Factory' : node.type === 'regional_hub' ? 'Regional Hub' : 'Local DC'),
+          type: node.type || 'local_dc',
+          stock: String(node.stock),
+          parent: node.parent || '',
+          lat: node.lat != null ? Number(node.lat) : fallback.lat,
+          lng: node.lng != null ? Number(node.lng) : fallback.lng,
+          address: node.address || fallback.label || '',
+          isCustomGeo: Boolean(node.address || node.lat != null)
+        };
+      });
       setConfigNodes(extractedNodes);
     } else {
+      const defCoords = getCoordinatesForCity('Mumbai');
       setConfigCities(['Mumbai']);
       setConfigNodes([{
         id: 'node-1',
@@ -351,7 +338,11 @@ function Dashboard({ user }) {
         name: 'Local DC',
         type: 'local_dc',
         stock: '100',
-        parent: ''
+        parent: '',
+        lat: defCoords.lat,
+        lng: defCoords.lng,
+        address: defCoords.label || 'Mumbai Center',
+        isCustomGeo: false
       }]);
     }
     setIsConfigModalOpen(true);
@@ -383,10 +374,18 @@ function Dashboard({ user }) {
     updatedCities[index] = newName;
     setConfigCities(updatedCities);
 
+    const newCityCoords = getCoordinatesForCity(newName);
+
     // Update city on all associated nodes
     setConfigNodes(configNodes.map(node => {
       if (node.city === oldName) {
-        return { ...node, city: newName };
+        return { 
+          ...node, 
+          city: newName,
+          lat: node.isCustomGeo ? node.lat : newCityCoords.lat,
+          lng: node.isCustomGeo ? node.lng : newCityCoords.lng,
+          address: node.isCustomGeo ? node.address : (newCityCoords.label || `${newName} Hub`)
+        };
       }
       return node;
     }));
@@ -399,6 +398,7 @@ function Dashboard({ user }) {
     const typeLabel = defaultType === 'factory' ? 'Factory' : defaultType === 'regional_hub' ? 'Regional Hub' : 'Local DC';
     const countOfType = configNodes.filter(n => n.city === city && n.type === defaultType).length;
     const name = `${typeLabel} ${countOfType + 1}`;
+    const defCoords = getCoordinatesForCity(city);
 
     const newNode = {
       id: newId,
@@ -406,7 +406,11 @@ function Dashboard({ user }) {
       name,
       type: defaultType,
       stock: '100',
-      parent: ''
+      parent: '',
+      lat: defCoords.lat,
+      lng: defCoords.lng,
+      address: defCoords.label || `${city} Hub`,
+      isCustomGeo: false
     };
     setConfigNodes([...configNodes, newNode]);
   };
@@ -527,12 +531,19 @@ function Dashboard({ user }) {
     configNodes.forEach(node => {
       const key = idToKeyMap[node.id];
       const parentKey = node.parent ? (idToKeyMap[node.parent] || '') : '';
+      const coords = (node.lat != null && node.lng != null && !isNaN(node.lat) && !isNaN(node.lng))
+        ? { lat: Number(node.lat), lng: Number(node.lng) }
+        : getCoordinatesForCity(node.city);
+
       newInventory[key] = {
         stock: parseInt(node.stock),
         type: node.type,
         parent: parentKey,
         city: node.city.trim(),
-        displayName: node.name.trim()
+        displayName: node.name.trim(),
+        lat: coords.lat,
+        lng: coords.lng,
+        address: node.address || ''
       };
     });
 
@@ -617,27 +628,29 @@ function Dashboard({ user }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 font-sans text-slate-200">
+    <div className="min-h-screen bg-[#030712] font-sans text-slate-200 relative">
       
-      {/* Dynamic Background */}
+      {/* Dynamic Background with Cyber Grid */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden cyber-grid opacity-50" />
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-900/20 blur-[150px]"></div>
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-900/20 blur-[150px]"></div>
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-600/15 blur-[150px]"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/15 blur-[150px]"></div>
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-slate-900/50 backdrop-blur-xl border-b border-white/5">
+      <header className="sticky top-0 z-50 bg-[#030712]/80 backdrop-blur-xl border-b border-cyan-500/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <Link to="/" className="h-10 w-10 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 hover:scale-105 transition-transform">
-               <PackageOpen className="h-6 w-6 text-white" />
-            </Link>
-            <h1 className="text-xl sm:text-2xl font-bold text-white font-display tracking-tight">ChainMind</h1>
-          </div>
-          <div className="flex items-center space-x-4">
+          <Link to="/" className="flex items-center space-x-3 group">
+            <Logo size="md" />
+            <div className="flex flex-col">
+              <h1 className="text-xl sm:text-2xl font-bold text-white font-display tracking-tight group-hover:text-cyan-400 transition-colors">ChainMind</h1>
+              <span className="text-[9px] font-mono tracking-widest text-cyan-400/80 uppercase -mt-0.5 hidden sm:inline">Digital Twin Matrix</span>
+            </div>
+          </Link>
+          <div className="flex items-center space-x-3 sm:space-x-4">
             <button 
               onClick={openConfigModal}
-              className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all text-sm font-medium group"
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 transition-all text-sm font-semibold group cursor-pointer"
               title="Configure Storage Locations"
             >
               <Sliders className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" />
@@ -645,7 +658,7 @@ function Dashboard({ user }) {
             </button>
             <Link 
               to="/settings"
-              className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 transition-all text-sm font-medium group"
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all text-sm font-semibold group cursor-pointer"
               title="Account Settings"
             >
               <User className="h-4 w-4 group-hover:scale-110 transition-transform duration-300" />
@@ -746,10 +759,10 @@ function Dashboard({ user }) {
               <button 
                 onClick={handleSimulate}
                 disabled={simulating || !inventory || Object.keys(inventory).length === 0}
-                className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed group"
+                className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-linear-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-xl font-bold shadow-lg shadow-cyan-500/25 transition-all focus:ring-4 focus:ring-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed group cursor-pointer"
               >
                 {simulating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Activity className="h-5 w-5 group-hover:scale-110 transition-transform" />}
-                <span>{simulating ? 'Processing...' : 'Inject Surge'}</span>
+                <span>{simulating ? 'Processing Matrix...' : 'Inject Surge'}</span>
               </button>
             </div>
           </div>
@@ -775,54 +788,20 @@ function Dashboard({ user }) {
           </div>
         )}
 
+        {/* Live Geospatial Logistics Twin Map */}
+        {inventory && Object.keys(inventory).length > 0 && (
+          <GeospatialNetworkMap
+            inventory={inventory}
+            simTargetCity={simTargetCity}
+            onSelectTarget={setSimTargetCity}
+          />
+        )}
+
         {/* Warehouse Network Cards */}
         <div>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 ml-2">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">
-              Global Storage Location Status
-            </h3>
-            
-            {/* Box Size / Density Adjuster */}
-            <div className="flex items-center space-x-1.5 bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-xl p-1 text-xs self-start sm:self-auto shadow-inner">
-              <span className="text-[10px] uppercase font-bold text-slate-500 px-2 tracking-wider">Box Size:</span>
-              <button 
-                type="button"
-                onClick={() => setCardSize('auto')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  cardSize === 'auto' 
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-                title="Automatically adjusts box sizes and typography according to number length"
-              >
-                Auto (By Number)
-              </button>
-              <button 
-                type="button"
-                onClick={() => setCardSize('wide')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  cardSize === 'wide' 
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-                title="Force wider box sizes for all storage locations"
-              >
-                Wide
-              </button>
-              <button 
-                type="button"
-                onClick={() => setCardSize('compact')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  cardSize === 'compact' 
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-                title="Compact box sizes for dense supply chain networks"
-              >
-                Compact
-              </button>
-            </div>
-          </div>
+          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 ml-2">
+            Global Storage Location Status
+          </h3>
 
           {!inventory || Object.keys(inventory).length === 0 ? (
             <div className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-8 border border-dashed border-white/10 text-center py-12 flex flex-col items-center">
@@ -852,7 +831,7 @@ function Dashboard({ user }) {
                       <span>Tier 1: Production Factories</span>
                       <span className="text-[10px] text-slate-500 font-normal lowercase tracking-normal">({factories.length} {factories.length === 1 ? 'node' : 'nodes'})</span>
                     </h4>
-                    <div className={getTierGridClass(factories, cardSize)}>
+                    <div className={getTierGridClass(factories)}>
                       {factories.map(([name, node]) => (
                         <LocationStatusCard
                           key={name}
@@ -861,7 +840,6 @@ function Dashboard({ user }) {
                           inventory={inventory}
                           simTargetCity={simTargetCity}
                           onSelect={setSimTargetCity}
-                          cardSize={cardSize}
                           tierType="factory"
                         />
                       ))}
@@ -881,7 +859,7 @@ function Dashboard({ user }) {
                       <span>Tier 2: Regional Hubs</span>
                       <span className="text-[10px] text-slate-500 font-normal lowercase tracking-normal">({hubs.length} {hubs.length === 1 ? 'node' : 'nodes'})</span>
                     </h4>
-                    <div className={getTierGridClass(hubs, cardSize)}>
+                    <div className={getTierGridClass(hubs)}>
                       {hubs.map(([name, node]) => (
                         <LocationStatusCard
                           key={name}
@@ -890,7 +868,6 @@ function Dashboard({ user }) {
                           inventory={inventory}
                           simTargetCity={simTargetCity}
                           onSelect={setSimTargetCity}
-                          cardSize={cardSize}
                           tierType="regional_hub"
                         />
                       ))}
@@ -910,7 +887,7 @@ function Dashboard({ user }) {
                       <span>Tier 3: Local Distribution Centers</span>
                       <span className="text-[10px] text-slate-500 font-normal lowercase tracking-normal">({dcs.length} {dcs.length === 1 ? 'node' : 'nodes'})</span>
                     </h4>
-                    <div className={getTierGridClass(dcs, cardSize)}>
+                    <div className={getTierGridClass(dcs)}>
                       {dcs.map(([name, node]) => (
                         <LocationStatusCard
                           key={name}
@@ -919,7 +896,6 @@ function Dashboard({ user }) {
                           inventory={inventory}
                           simTargetCity={simTargetCity}
                           onSelect={setSimTargetCity}
-                          cardSize={cardSize}
                           tierType="local_dc"
                         />
                       ))}
@@ -933,7 +909,7 @@ function Dashboard({ user }) {
 
         {/* AI Insight Panel */}
         <div className="bg-slate-900/60 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/10 overflow-hidden relative">
-          <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-cyan-400 via-sky-400 to-blue-600"></div>
           
           <div className="px-8 py-5 border-b border-white/5 flex justify-between items-center bg-white/5">
             <div className="flex items-center space-x-3 text-white">
@@ -1009,7 +985,7 @@ function Dashboard({ user }) {
                   <button 
                     onClick={handleDownloadMitigationReport}
                     disabled={downloadingPDF}
-                    className="flex items-center space-x-2 px-5 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed group"
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-linear-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-xl font-bold shadow-lg shadow-cyan-500/25 transition-all focus:ring-4 focus:ring-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed group cursor-pointer"
                   >
                     {downloadingPDF ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5 group-hover:-translate-y-1 transition-transform" />}
                     <span>{downloadingPDF ? 'Generating PDF...' : 'Download Mitigation Report'}</span>
@@ -1196,6 +1172,28 @@ function Dashboard({ user }) {
                                     </select>
                                   </div>
                                 </div>
+
+                                {/* Leaflet Geospatial Pin Bar */}
+                                <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
+                                  <div className="flex items-center space-x-1.5 min-w-0 flex-1">
+                                    <MapPin className={`h-3.5 w-3.5 shrink-0 ${node.lat != null ? 'text-emerald-400' : 'text-slate-400'}`} />
+                                    <span className="text-[10px] text-slate-400 truncate" title={node.address || `${node.city} Location`}>
+                                      {node.address 
+                                        ? node.address 
+                                        : node.lat != null 
+                                          ? `${Number(node.lat).toFixed(3)}°, ${Number(node.lng).toFixed(3)}°`
+                                          : 'Not pinned yet'}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActivePickerNode(node)}
+                                    className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all flex items-center space-x-1 shrink-0 cursor-pointer"
+                                  >
+                                    <MapPin className="h-3 w-3" />
+                                    <span>{node.isCustomGeo ? 'Edit Pin' : 'Map Pin'}</span>
+                                  </button>
+                                </div>
                               </div>
                             );
                           })}
@@ -1230,13 +1228,13 @@ function Dashboard({ user }) {
                   <>
                     <button 
                       onClick={() => setIsConfigModalOpen(false)}
-                      className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
+                      className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button 
                       onClick={handleNextStep}
-                      className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
+                      className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-cyan-500/25 text-sm font-bold text-white bg-linear-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 transition-all cursor-pointer"
                     >
                       Next: Configure Details
                     </button>
@@ -1245,13 +1243,13 @@ function Dashboard({ user }) {
                   <>
                     <button 
                       onClick={() => setConfigStep(1)}
-                      className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors"
+                      className="flex-1 py-3 px-4 border border-white/10 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
                     >
                       Back to Locations
                     </button>
                     <button 
                       onClick={handleSaveConfig}
-                      className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all"
+                      className="flex-1 py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-cyan-500/25 text-sm font-bold text-white bg-linear-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 transition-all cursor-pointer"
                     >
                       Save Changes
                     </button>
@@ -1261,6 +1259,33 @@ function Dashboard({ user }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Interactive Leaflet Map Location Picker Modal */}
+      {activePickerNode && (
+        <LocationMapPickerModal
+          isOpen={Boolean(activePickerNode)}
+          cityName={activePickerNode.city}
+          nodeName={activePickerNode.name}
+          initialLat={activePickerNode.lat}
+          initialLng={activePickerNode.lng}
+          onClose={() => setActivePickerNode(null)}
+          onSave={({ lat, lng, address }) => {
+            setConfigNodes(prev => prev.map(n => {
+              if (n.id === activePickerNode.id) {
+                return {
+                  ...n,
+                  lat,
+                  lng,
+                  address,
+                  isCustomGeo: true
+                };
+              }
+              return n;
+            }));
+            setActivePickerNode(null);
+          }}
+        />
       )}
 
       {/* Custom Dialog Box */}

@@ -4,8 +4,9 @@ import {
   getAdditionalUserInfo, 
   deleteUser
 } from 'firebase/auth';
-import { PackageOpen, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import Logo from '../components/Logo';
 
 function Login() {
   const location = useLocation();
@@ -54,65 +55,66 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans overflow-hidden relative">
+    <div className="min-h-screen bg-[#030712] flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans overflow-hidden relative">
       
       {/* Background Effects */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden cyber-grid opacity-60" />
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px]"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-600/10 blur-[120px]"></div>
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-600/15 blur-[140px]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/15 blur-[140px]"></div>
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 text-center">
-        <Link to="/" className="inline-flex items-center justify-center h-16 w-16 bg-linear-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-xl shadow-blue-500/20 mb-4 hover:scale-105 transition-transform">
-          <PackageOpen className="h-10 w-10 text-white" />
+        <Link to="/" className="inline-block group mb-3">
+          <Logo size="xl" className="justify-center" />
         </Link>
-        <h2 className="mt-2 text-center text-4xl font-extrabold text-white font-display tracking-tight">
+        <h2 className="mt-2 text-center text-3xl sm:text-4xl font-extrabold text-white font-display tracking-tight">
           {isSignUp ? 'Create Account' : 'Welcome Back'}
         </h2>
         <p className="mt-2 text-center text-sm text-slate-400">
-          Sign in to access your digital twin dashboard
+          Sign in to access your ChainMind digital twin matrix
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="bg-white/5 backdrop-blur-xl py-8 px-4 shadow-2xl sm:rounded-3xl sm:px-10 border border-white/10">
+        <div className="bg-slate-900/60 backdrop-blur-2xl py-8 px-4 shadow-2xl sm:rounded-3xl sm:px-10 border border-cyan-500/20">
           
           <form className="space-y-6" onSubmit={handleEmailAuth}>
             {error && (
-              <div className="bg-red-500/10 border border-red-500/50 p-3 rounded-lg text-sm text-red-400 text-center">
+              <div className="bg-red-500/10 border border-red-500/40 p-3 rounded-xl text-sm text-red-400 text-center font-medium">
                 {error}
               </div>
             )}
             
             <div>
-              <label className="block text-sm font-medium text-slate-300">Email address</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Email address</label>
               <div className="mt-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-slate-500" />
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Mail className="h-4 w-4 text-slate-500" />
                 </div>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full pl-10 px-3 py-3 border border-white/10 rounded-xl bg-black/20 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-all"
+                  className="appearance-none block w-full pl-10 px-3 py-3 border border-white/10 rounded-xl bg-black/40 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 sm:text-sm transition-all"
                   placeholder="admin@chainmind.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300">Password</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Password</label>
               <div className="mt-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-slate-500" />
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Lock className="h-4 w-4 text-slate-500" />
                 </div>
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full pl-10 px-3 py-3 border border-white/10 rounded-xl bg-black/20 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-all"
+                  className="appearance-none block w-full pl-10 px-3 py-3 border border-white/10 rounded-xl bg-black/40 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 sm:text-sm transition-all"
                   placeholder="••••••••"
                 />
               </div>
@@ -122,11 +124,11 @@ function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-blue-500 transition-all disabled:opacity-70 group cursor-pointer"
+                className="w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg shadow-cyan-500/25 text-sm font-bold text-white bg-linear-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all disabled:opacity-70 group cursor-pointer"
               >
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
                   <>
-                    <span>{isSignUp ? 'Sign Up' : 'Sign In'}</span>
+                    <span>{isSignUp ? 'Create Twin Account' : 'Sign In to Matrix'}</span>
                     <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                   </>
                 )}
@@ -139,15 +141,15 @@ function Login() {
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-white/10" />
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-slate-900 text-slate-400 rounded-full border border-white/10 text-xs">Or continue with</span>
+              <div className="relative flex justify-center text-xs uppercase tracking-wider font-semibold">
+                <span className="px-3 bg-slate-900 text-slate-500 rounded-full border border-white/10">Or continue with</span>
               </div>
             </div>
 
             <div className="mt-6">
               <button
                 onClick={handleGoogleSignIn}
-                className="w-full inline-flex justify-center py-3 px-4 border border-white/10 rounded-xl shadow-sm bg-white/5 text-sm font-medium text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="w-full inline-flex justify-center items-center py-3 px-4 border border-white/10 rounded-xl shadow-sm bg-white/5 hover:bg-white/10 text-sm font-semibold text-white transition-all cursor-pointer"
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -163,7 +165,7 @@ function Login() {
           <div className="mt-6 text-center">
             <button 
               onClick={() => setIsSignUp(!isSignUp)}
-              className="text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+              className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
             >
               {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
             </button>
@@ -176,4 +178,3 @@ function Login() {
 }
 
 export default Login;
-
